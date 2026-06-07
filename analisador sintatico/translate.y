@@ -58,8 +58,6 @@ void yyerror(const char *msg);
 %token IF             /* F     */
 %token ELSE           /* Em    */
 %token WHILE          /* Bm    */
-%token SWITCH         /* E     */
-%token CASE           /* A     */
 %token KW_RETURN      /* Am    */
 %token KW_BREAK       /* G#dim */
 %token KW_CONTINUE    /* A7    */
@@ -190,7 +188,6 @@ stmt
     | op_unario
     | if_stmt
     | while_stmt
-    | switch_stmt
     | return_stmt
     | break_stmt
     | continue_stmt
@@ -258,22 +255,6 @@ if_stmt
  * ---------------------------------------------------------- */
 while_stmt
     : WHILE BLOCO_INI ID FIM_LINHA stmt_list END_BLOCO
-    ;
-
-/* ----------------------------------------------------------
- * SWITCH / CASE
- * ---------------------------------------------------------- */
-switch_stmt
-    : SWITCH ID BLOCO_INI case_list END_BLOCO
-    ;
-
-case_list
-    : case_list case_stmt
-    | case_stmt
-    ;
-
-case_stmt
-    : CASE operando BLOCO_INI stmt_list END_BLOCO
     ;
 
 /* ----------------------------------------------------------
