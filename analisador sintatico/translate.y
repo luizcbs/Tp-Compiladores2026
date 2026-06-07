@@ -4,18 +4,21 @@
  * Topico 3: Gramatica e Analisador Sintatico
  *
  * NOTACAO DE TRES ENDERECOS (Secao 4 da especificacao):
- *   OP dest src1 src2 B C  →  dest = src1 OP src2
+ * OP dest src1 src2 B C  →  dest = src1 OP src2
+ *
+ * ATRIBUICAO DE VALORES (Estrategia Assembly/RISC):
+ * C/E dest 0 src B C     →  dest = 0 + src (Atribuicao direta)
  *
  * ORDEM DA DECLARACAO DE VARIAVEL (Secao 6):
- *   TIPO Dm/A id Cm           →  sem valor inicial
- *   TIPO Dm/A id Cm val B C   →  com valor inicial
+ * TIPO Dm/A id Cm           →  sem valor inicial
+ * TIPO Dm/A id Cm val B C   →  com valor inicial
  *
  * CONDICIONAL/REPETICAO (Secao 5):
- *   A condicao e a primeira linha DENTRO do bloco (nota guia):
- *   F C
- *       cond B C     ← nota guia
- *       comandos
- *   Cm
+ * A condicao e a primeira linha DENTRO do bloco (nota guia):
+ * F C
+ * cond B C     ← nota guia
+ * comandos
+ * Cm
  */
 
 #include <stdio.h>
@@ -50,7 +53,6 @@ void yyerror(const char *msg);
 /* Palavras-chave de declaracao */
 %token VAR            /* Dm/A  — declara variavel          */
 %token FUNC           /* Bm/F# — declara funcao            */
-%token MOVE           /* D/F#  — atribuicao simples (Move) */
 
 /* Controle de fluxo */
 %token IF             /* F     */
@@ -62,10 +64,14 @@ void yyerror(const char *msg);
 %token KW_BREAK       /* G#dim */
 %token KW_CONTINUE    /* A7    */
 
+/* Entrada e Saida */
+%token PRINT          /* G     — Saida padrao              */
+%token READ           /* Dm    — Entrada padrao            */
+
 /* Delimitadores de bloco
  * IMPORTANTE: END_BLOCO (Cm) tem dupla funcao na linguagem:
- *   1. Termina blocos if/while/func:  F C ... Cm
- *   2. Termina nomes em declaracoes:  C/G Dm/A x Cm  */
+ * 1. Termina blocos if/while/func:  F C ... Cm
+ * 2. Termina nomes em declaracoes:  C/G Dm/A x Cm  */
 %token BLOCO_INI      /* C  */
 %token END_BLOCO      /* Cm */
 
@@ -106,12 +112,6 @@ void yyerror(const char *msg);
 /* Tipo do nao-terminal 'type' para propagar o nome do tipo */
 %type <sval> type
 
-/*
- * SEM %left/%right:
- * Na notacao de tres enderecos nao existem expressoes aninhadas,
- * portanto nao ha ambiguidade de precedencia para resolver.
- */
-
 %%
 
 /* ==============================================================
@@ -144,17 +144,10 @@ type
     ;
 
 /* ----------------------------------------------------------
- * DECLARACAO DE VARIAVEL (Secao 6 — gramatica corrigida)
+ * DECLARACAO DE VARIAVEL
  *
  * TIPO Dm/A id Cm              →  sem valor inicial
  * TIPO Dm/A id Cm operando BC  →  com valor inicial
- *
- * Exemplos:
- *   C/G Dm/A x Cm              →  int x
- *   C/G Dm/A x Cm 10 B C       →  int x = 10
- *
- * Nota: 'Cm' (END_BLOCO) aqui e terminador de nome,
- *       nao fechamento de bloco.
  * ---------------------------------------------------------- */
 var_decl
     : type VAR ID END_BLOCO
@@ -164,18 +157,7 @@ var_decl
     ;
 
 /* ----------------------------------------------------------
- * DECLARACAO DE FUNCAO (Secao 4.3)
- *
- * TIPO Bm/F# id [params] C corpo Cm
- *
- * Exemplos:
- *   C/G Bm/F# dobro C/G x C      →  int dobro(int x) { ... }
- *       corpo
- *   Cm
- *
- *   C/G Bm/F# soma C/G a C/G b C →  int soma(int a, int b) { ... }
- *       corpo
- *   Cm
+ * DECLARACAO DE FUNCAO
  * ---------------------------------------------------------- */
 func_decl
     : type FUNC ID param_list BLOCO_INI stmt_list END_BLOCO
@@ -204,7 +186,6 @@ stmt_list
 
 stmt
     : var_decl
-    | assign_stmt
     | op_binario
     | op_unario
     | if_stmt
@@ -215,6 +196,9 @@ stmt
     | continue_stmt
     | read_list_stmt
     | write_list_stmt
+    | print_stmt
+    | read_stmt
+    | func_call_stmt
     ;
 
 /* ----------------------------------------------------------
@@ -233,29 +217,11 @@ operando
     ;
 
 /* ----------------------------------------------------------
- * ATRIBUICAO SIMPLES (Move)
- *
- * Sintaxe: D/F# dest src BC
- * Exemplo: D/F# idade 20 B C   →   idade = 20
- * ---------------------------------------------------------- */
-assign_stmt
-    : MOVE ID operando FIM_LINHA
-    ;
-
-/* ----------------------------------------------------------
- * OPERACOES BINARIAS DE TRES ENDERECOS
+ * OPERACOES BINARIAS DE TRES ENDERECOS (E ATRIBUICAO)
  *
  * Sintaxe: OP dest src1 src2 BC
- *
- * Exemplos (Secao 3):
- *   C/E   total valor1 valor2 B C   →  total  = valor1 + valor2
- *   Dm/F# saldo ganho  gasto  B C   →  saldo  = ganho  - gasto
- *   E/G   area  base   altura B C   →  area   = base   * altura
- *   F/A   media soma   qtd    B C   →  media  = soma   / qtd
- *   G/B   pode  tem    maior  B C   →  pode   = tem    && maior
- *   Am/C  aprov passou entregou B C →  aprov  = passou || entregou
- *   E7/G  maior idade  limite  B C  →  maior  = idade  >  limite
- *   G7/B  aprov nota   media   B C  →  aprov  = nota   >= media
+ * Obs: Para atribuicao direta, usa-se a soma com zero.
+ * Ex: C/E flag 0 true B C → flag = 0 + true
  * ---------------------------------------------------------- */
 op_binario
     : OP_ADD ID operando operando FIM_LINHA
@@ -274,41 +240,13 @@ op_binario
 
 /* ----------------------------------------------------------
  * OPERACAO UNARIA DE TRES ENDERECOS
- *
- * Sintaxe: Bm/D dest src BC
- * Exemplo: Bm/D bloqueado ativo B C  →  bloqueado = !ativo
  * ---------------------------------------------------------- */
 op_unario
     : OP_NOT ID operando FIM_LINHA
     ;
 
 /* ----------------------------------------------------------
- * IF / IF-ELSE (Secao 5.1 e 5.2)
- *
- * A condicao e a primeira linha DENTRO do bloco (nota guia).
- * Deve ser um ID (variavel booleana pre-calculada) + BC.
- *
- * Sintaxe:
- *   F C
- *       cond B C          ← nota guia
- *       [comandos]
- *   Cm
- *
- *   F C
- *       cond B C
- *       [comandos_verdadeiro]
- *   Cm Em C
- *       [comandos_falso]
- *   Cm
- *
- * Exemplo (if_else.sndy da documentacao):
- *   G7/B aprovado nota media B C
- *   F C
- *       aprovado B C
- *       D/F# situacao 1 B C
- *   Cm Em C
- *       D/F# situacao 0 B C
- *   Cm
+ * IF / IF-ELSE
  * ---------------------------------------------------------- */
 if_stmt
     : IF BLOCO_INI ID FIM_LINHA stmt_list END_BLOCO
@@ -316,36 +254,14 @@ if_stmt
     ;
 
 /* ----------------------------------------------------------
- * WHILE (Secao 5.3)
- *
- * Mesma logica do IF: condicao e nota guia dentro do bloco.
- *
- * Sintaxe:
- *   Bm C
- *       cond B C          ← nota guia
- *       [comandos]
- *   Cm
- *
- * Exemplo (while.sndy da documentacao):
- *   F7/A continua contador limite B C
- *   Bm C
- *       continua B C
- *       C/E contador contador um B C
- *       F7/A continua contador limite B C
- *   Cm
+ * WHILE
  * ---------------------------------------------------------- */
 while_stmt
     : WHILE BLOCO_INI ID FIM_LINHA stmt_list END_BLOCO
     ;
 
 /* ----------------------------------------------------------
- * SWITCH / CASE (Secao 4.2)
- *
- * Sintaxe:
- *   E id C
- *       A operando C comandos Cm
- *       A operando C comandos Cm
- *   Cm
+ * SWITCH / CASE
  * ---------------------------------------------------------- */
 switch_stmt
     : SWITCH ID BLOCO_INI case_list END_BLOCO
@@ -361,10 +277,10 @@ case_stmt
     ;
 
 /* ----------------------------------------------------------
- * RETURN / BREAK / CONTINUE
+ * RETURN / BREAK / CONTINUE / PRINT / READ
  * ---------------------------------------------------------- */
 return_stmt
-    : KW_RETURN ID FIM_LINHA
+    : KW_RETURN operando FIM_LINHA
     ;
 
 break_stmt
@@ -375,11 +291,31 @@ continue_stmt
     : KW_CONTINUE FIM_LINHA
     ;
 
+print_stmt
+    : PRINT operando FIM_LINHA
+    ;
+
+read_stmt
+    : READ ID FIM_LINHA
+    ;
+
 /* ----------------------------------------------------------
- * OPERACOES DE LISTA (Secao 4.2)
+ * CHAMADA DE FUNCAO (Function Call)
  *
- * ReadList:  C7maj dest lista idx BC  →  dest = lista[idx]
- * WriteList: Cm7 lista idx valor BC   →  lista[idx] = valor
+ * Sintaxe: id operando1 operando2 ... BC
+ * Exemplo: soma 10 20 B C
+ * ---------------------------------------------------------- */
+func_call_stmt
+    : ID operando_list FIM_LINHA
+    ;
+
+operando_list
+    : operando_list operando
+    | /* vazio */
+    ;
+
+/* ----------------------------------------------------------
+ * OPERACOES DE LISTA
  * ---------------------------------------------------------- */
 read_list_stmt
     : READ_LIST ID ID operando FIM_LINHA
