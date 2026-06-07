@@ -62,10 +62,6 @@ void yyerror(const char *msg);
 %token KW_BREAK       /* G#dim */
 %token KW_CONTINUE    /* A7    */
 
-/* Entrada e Saida */
-%token PRINT          /* G     — Saida padrao              */
-%token READ           /* Dm    — Entrada padrao            */
-
 /* Delimitadores de bloco
  * IMPORTANTE: END_BLOCO (Cm) tem dupla funcao na linguagem:
  * 1. Termina blocos if/while/func:  F C ... Cm
@@ -193,8 +189,6 @@ stmt
     | continue_stmt
     | read_list_stmt
     | write_list_stmt
-    | print_stmt
-    | read_stmt
     | func_call_stmt
     ;
 
@@ -258,7 +252,7 @@ while_stmt
     ;
 
 /* ----------------------------------------------------------
- * RETURN / BREAK / CONTINUE / PRINT / READ
+ * RETURN / BREAK / CONTINUE
  * ---------------------------------------------------------- */
 return_stmt
     : KW_RETURN operando FIM_LINHA
@@ -270,14 +264,6 @@ break_stmt
 
 continue_stmt
     : KW_CONTINUE FIM_LINHA
-    ;
-
-print_stmt
-    : PRINT operando FIM_LINHA
-    ;
-
-read_stmt
-    : READ ID FIM_LINHA
     ;
 
 /* ----------------------------------------------------------
