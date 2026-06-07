@@ -237,7 +237,6 @@ int main(int argc, char *argv[]) {
     printf("=============================================================\n");
     printf("  Analise concluida. Linhas processadas: %d\n", lineno);
     printf("=============================================================\n");
-
     if (argc > 1) fclose(yyin);
     return 0;
 }
