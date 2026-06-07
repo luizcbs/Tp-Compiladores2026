@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include "translate.tab.h"
+#include "../yacc/translate.tab.h"
 
 %}
 

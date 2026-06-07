@@ -1,4 +1,3 @@
-// while.sndy — baseado na Secao 8.1 da documentacao
 C/E contador 0 0 B C
 C/E um 0 1 B C
 C/E limite 0 5 B C
