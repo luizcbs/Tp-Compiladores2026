@@ -1,0 +1,10 @@
+// while.sndy — baseado na Secao 8.1 da documentacao
+D/F# contador 0 B C
+D/F# um 1 B C
+D/F# limite 5 B C
+F7/A continua contador limite B C
+Bm C
+    continua B C
+    C/E contador contador um B C
+    F7/A continua contador limite B C
+Cm
