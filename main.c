@@ -1,195 +1,78 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include "TabelaSimbolo.h"
 
-int main()
+/*
+ * Interface principal do compilador:
+ * abre o arquivo, numera o codigo, chama o parser
+ * e imprime o resultado final.
+ */
+extern int yyparse(void);
+extern FILE *yyin;
+extern int yylineno;
+
+TabelaSimbolo *global = NULL;
+TabelaSimbolo *tabelaAtual = NULL;
+
+static void imprimir_codigo_numerado(FILE *arquivo)
 {
-    printf("=====================================\n");
-    printf("TESTE DA TABELA DE SIMBOLOS\n");
-    printf("=====================================\n\n");
+    char linha[1024];
+    int numero_linha = 1;
 
-    /* Cria o TabelaSimbolo global */
-    TabelaSimbolo *global = criarTabelaSimbolo("global", NULL);
-
-    /* Variável que representa o TabelaSimbolo atual */
-    TabelaSimbolo *TabelaSimboloAtual = global;
-
-    printf("TabelaSimbolo global criado.\n\n");
-
-    /* Teste criarSimbolo + inserirSimbolo */
-
-    inserirSimbolo(
-        TabelaSimboloAtual,
-        criarSimbolo(
-            "idade",
-            TIPO_INT,
-            CAT_VARIAVEL,
-            1
-        )
-    );
-
-    inserirSimbolo(
-        TabelaSimboloAtual,
-        criarSimbolo(
-            "media",
-            TIPO_FLOAT,
-            CAT_VARIAVEL,
-            2
-        )
-    );
-
-    inserirSimbolo(
-        TabelaSimboloAtual,
-        criarSimbolo(
-            "somar",
-            TIPO_INT,
-            CAT_FUNCAO,
-            5
-        )
-    );
-
-    printf("Simbolos globais inseridos.\n\n");
-
-    /* Teste de duplicação */
-
-    printf("Tentando inserir 'idade' novamente:\n");
-
-    inserirSimbolo(
-        TabelaSimboloAtual,
-        criarSimbolo(
-            "idade",
-            TIPO_INT,
-            CAT_VARIAVEL,
-            10
-        )
-    );
-
-    printf("\n");
-
-    /* Cria TabelaSimbolo da função */
-
-    TabelaSimbolo *TabelaSimboloFuncao =
-        criarTabelaSimbolo("somar", TabelaSimboloAtual);
-
-    adicionarFilho(
-        TabelaSimboloAtual,
-        TabelaSimboloFuncao
-    );
-
-    entrarTabalaSimbolo(
-        &TabelaSimboloAtual,
-        TabelaSimboloFuncao
-    );
-
-    printf("Entrou no TabelaSimbolo da funcao.\n\n");
-
-    /* Parâmetros */
-
-    inserirSimbolo(
-        TabelaSimboloAtual,
-        criarSimbolo(
-            "a",
-            TIPO_INT,
-            CAT_PARAMETRO,
-            5
-        )
-    );
-
-    inserirSimbolo(
-        TabelaSimboloAtual,
-        criarSimbolo(
-            "b",
-            TIPO_INT,
-            CAT_PARAMETRO,
-            5
-        )
-    );
-
-    /* Variável local */
-
-    inserirSimbolo(
-        TabelaSimboloAtual,
-        criarSimbolo(
-            "resultado",
-            TIPO_INT,
-            CAT_VARIAVEL,
-            6
-        )
-    );
-
-    printf("Parametros e variaveis locais inseridos.\n\n");
-
-    /* Teste buscarNoTabelaSimboloAtual */
-
-    Simbolo *s =
-        buscarNaTabelaSimboloAtual(
-            TabelaSimboloAtual,
-            "resultado"
-        );
-
-    if(s != NULL)
+    while (fgets(linha, sizeof(linha), arquivo) != NULL)
     {
-        printf(
-            "Encontrado no TabelaSimbolo atual: %s\n\n",
-            s->nome
-        );
+        printf("%4d | %s", numero_linha, linha);
+
+        if (strchr(linha, '\n') == NULL)
+        {
+            printf("\n");
+        }
+
+        numero_linha++;
+    }
+}
+
+int main(int argc, char *argv[])
+{
+    int resultado;
+
+    if (argc != 2)
+    {
+        printf("Uso: %s <arquivo.sndy>\n", argv[0]);
+        return 1;
     }
 
-    /* Cria TabelaSimbolo IF */
+    yyin = fopen(argv[1], "r");
+    if (yyin == NULL)
+    {
+        printf("Erro ao abrir o arquivo.\n");
+        return 1;
+    }
 
-    TabelaSimbolo *TabelaSimboloIf =
-        criarTabelaSimbolo(
-            "if",
-            TabelaSimboloAtual
-        );
+    global = criarTabelaSimbolo("global", NULL);
+    tabelaAtual = global;
 
-    adicionarFilho(
-        TabelaSimboloAtual,
-        TabelaSimboloIf
-    );
-
-    entrarTabalaSimbolo(
-        &TabelaSimboloAtual,
-        TabelaSimboloIf
-    );
-
-    inserirSimbolo(
-        TabelaSimboloAtual,
-        criarSimbolo(
-            "temp",
-            TIPO_INT,
-            CAT_VARIAVEL,
-            8
-        )
-    );
-
-    printf("Entrou no TabelaSimbolo IF.\n\n");
-
-    /* Sai do IF */
-
-    sairTabelaSimbolo(&TabelaSimboloAtual);
-
-    printf(
-        "Saiu do IF. TabelaSimbolo atual: %s\n\n",
-        TabelaSimboloAtual->nome
-    );
-
-    /* Sai da função */
-
-    sairTabelaSimbolo(&TabelaSimboloAtual);
-
-    printf(
-        "Saiu da funcao. TabelaSimbolo atual: %s\n\n",
-        TabelaSimboloAtual->nome
-    );
-
-    /* Imprime toda a árvore */
-
+    printf("Código fonte numerado:\n");
+    imprimir_codigo_numerado(yyin);
     printf("\n");
-    printf("=====================================\n");
-    printf("IMPRESSAO DA ARVORE\n");
-    printf("=====================================\n\n");
 
-    imprimirArvore(global, 0);
+    rewind(yyin);
+    yylineno = 1;
 
-    return 0;
+    resultado = yyparse();
+
+    if (resultado == 0)
+    {
+        printf("\nTabela de símbolos:\n");
+        if (global != NULL)
+        {
+            imprimirArvore(global, 0);
+        }
+        printf("Programa sintaticamente correto\n");
+    }
+
+    fclose(yyin);
+    return resultado == 0 ? 0 : 1;
 }

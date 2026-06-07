@@ -2,6 +2,8 @@
 /*
  * Soundy Script -- Analisador Sintatico (Trabalho Pratico 2)
  * Topico 3: Gramatica e Analisador Sintatico
+ * Este arquivo concentra a gramatica e as acoes semanticas do parser.
+ * A interface de execucao do compilador fica em main.c.
  *
  * NOTACAO DE TRES ENDERECOS (Secao 4 da especificacao):
  * OP dest src1 src2 B C  →  dest = src1 OP src2
@@ -27,16 +29,14 @@
 #include "TabelaSimbolo.h"
 
 extern int yylineno;
-extern FILE *yyin;
 int  yylex(void);
 void yyerror(const char *msg);
-static void imprimir_codigo_numerado(FILE *arquivo);
 static void inserir_simbolo(const char *nome, const char *tipo, const char *categoria, int linha);
 static Tipo tipo_de_texto(const char *tipo);
 static Categoria categoria_de_texto(const char *categoria);
 
-static TabelaSimbolo *global = NULL;
-static TabelaSimbolo *tabelaAtual = NULL;
+extern TabelaSimbolo *global;
+extern TabelaSimbolo *tabelaAtual;
 
 %}
 
@@ -333,68 +333,4 @@ void yyerror(const char *msg)
 {
     (void)msg;
     printf("Erro próximo a linha %d - Programa sintaticamente incorreto\n", yylineno);
-}
-
-static void imprimir_codigo_numerado(FILE *arquivo)
-{
-    char linha[1024];
-    int numero_linha = 1;
-
-    while (fgets(linha, sizeof(linha), arquivo) != NULL)
-    {
-        printf("%4d | %s", numero_linha, linha);
-
-        if (strchr(linha, '\n') == NULL)
-        {
-            printf("\n");
-        }
-
-        numero_linha++;
-    }
-}
-
-int main(int argc, char *argv[])
-{
-    int resultado;
-
-    if (argc != 2)
-    {
-        printf("Uso: %s <arquivo.sndy>\n", argv[0]);
-        return 1;
-    }
-
-    yyin = fopen(argv[1], "r");
-
-    if (yyin == NULL)
-    {
-        printf("Erro ao abrir o arquivo.\n");
-        return 1;
-    }
-
-    global = criarTabelaSimbolo("global", NULL);
-    tabelaAtual = global;
-
-    printf("Código fonte numerado:\n");
-    imprimir_codigo_numerado(yyin);
-    printf("\n");
-
-    rewind(yyin);
-    yylineno = 1;
-
-    resultado = yyparse();
-
-    if (resultado == 0)
-    {
-        printf("\nTabela de símbolos:\n");
-
-        if (global != NULL)
-        {
-            imprimirArvore(global, 0);
-        }
-
-        printf("Programa sintaticamente correto\n");
-    }
-
-    fclose(yyin);
-    return resultado == 0 ? 0 : 1;
 }
