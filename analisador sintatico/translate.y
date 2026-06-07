@@ -24,11 +24,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "tabela_simbolos.h"
+#include "TabelaSimbolo.h"
 
-extern int lineno;
+extern int yylineno;
+extern FILE *yyin;
 int  yylex(void);
 void yyerror(const char *msg);
+static void imprimir_codigo_numerado(FILE *arquivo);
+static void inserir_simbolo(const char *nome, const char *tipo, const char *categoria, int linha);
+static Tipo tipo_de_texto(const char *tipo);
+static Categoria categoria_de_texto(const char *categoria);
+
+static TabelaSimbolo *global = NULL;
+static TabelaSimbolo *tabelaAtual = NULL;
 
 %}
 
@@ -103,8 +111,8 @@ void yyerror(const char *msg);
 %token <sval> ID
 %token <sval> ACORDE_LIVRE
 
-/* Tipo do nao-terminal 'type' para propagar o nome do tipo */
-%type <sval> type
+%nonassoc DECL_SEM_INICIALIZACAO
+%nonassoc ID LIT_INT LIT_FLOAT LIT_CHAR LIT_STRING LIT_BOOL ACORDE_LIVRE
 
 %%
 
@@ -129,35 +137,26 @@ decl
     ;
 
 /* ----------------------------------------------------------
- * TIPO
- * Nao-terminal auxiliar que propaga o nome do tipo ($$ = $1).
- * Usado em var_decl, func_decl e param para capturar o tipo.
- * ---------------------------------------------------------- */
-type
-    : TIPO { strcpy($$, $1); }
-    ;
-
-/* ----------------------------------------------------------
  * DECLARACAO DE VARIAVEL
  *
  * TIPO Dm/A id Cm              →  sem valor inicial
  * TIPO Dm/A id Cm operando BC  →  com valor inicial
  * ---------------------------------------------------------- */
 var_decl
-    : type VAR ID END_BLOCO
-        { inserir_simbolo($3, $1, "variavel", lineno); }
-    | type VAR ID END_BLOCO operando FIM_LINHA
-        { inserir_simbolo($3, $1, "variavel", lineno); }
+    : TIPO VAR ID END_BLOCO %prec DECL_SEM_INICIALIZACAO
+        { inserir_simbolo($3, $1, "variavel", yylineno); }
+    | TIPO VAR ID END_BLOCO operando FIM_LINHA
+        { inserir_simbolo($3, $1, "variavel", yylineno); }
     ;
 
 /* ----------------------------------------------------------
  * DECLARACAO DE FUNCAO
  * ---------------------------------------------------------- */
 func_decl
-    : type FUNC ID param_list BLOCO_INI stmt_list END_BLOCO
-        { inserir_simbolo($3, $1, "funcao", lineno); }
-    | type FUNC ID BLOCO_INI stmt_list END_BLOCO
-        { inserir_simbolo($3, $1, "funcao", lineno); }
+    : TIPO FUNC ID param_list BLOCO_INI stmt_list END_BLOCO
+        { inserir_simbolo($3, $1, "funcao", yylineno); }
+    | TIPO FUNC ID BLOCO_INI stmt_list END_BLOCO
+        { inserir_simbolo($3, $1, "funcao", yylineno); }
     ;
 
 /* Parametros: lista de pares TIPO ID listados antes do 'C' */
@@ -293,3 +292,109 @@ write_list_stmt
     ;
 
 %%
+
+static Tipo tipo_de_texto(const char *tipo)
+{
+    if (strcmp(tipo, "int") == 0 || strcmp(tipo, "C/G") == 0) return TIPO_INT;
+    if (strcmp(tipo, "float") == 0 || strcmp(tipo, "Am/E") == 0) return TIPO_FLOAT;
+    if (strcmp(tipo, "bool") == 0 || strcmp(tipo, "Em/B") == 0) return TIPO_BOOL;
+    if (strcmp(tipo, "char") == 0 || strcmp(tipo, "F/C") == 0) return TIPO_CHAR;
+    if (strcmp(tipo, "null") == 0 || strcmp(tipo, "G/D") == 0) return TIPO_NULL;
+    if (strcmp(tipo, "lista") == 0 || strcmp(tipo, "C7") == 0) return TIPO_LISTA;
+    return TIPO_NULL;
+}
+
+static Categoria categoria_de_texto(const char *categoria)
+{
+    if (strcmp(categoria, "funcao") == 0) return CAT_FUNCAO;
+    if (strcmp(categoria, "parametro") == 0) return CAT_PARAMETRO;
+    return CAT_VARIAVEL;
+}
+
+static void inserir_simbolo(const char *nome, const char *tipo, const char *categoria, int linha)
+{
+    if (tabelaAtual == NULL)
+    {
+        return;
+    }
+
+    inserirSimbolo(
+        tabelaAtual,
+        criarSimbolo(
+            (char *)nome,
+            tipo_de_texto(tipo),
+            categoria_de_texto(categoria),
+            linha
+        )
+    );
+}
+
+void yyerror(const char *msg)
+{
+    (void)msg;
+    printf("Erro próximo a linha %d - Programa sintaticamente incorreto\n", yylineno);
+}
+
+static void imprimir_codigo_numerado(FILE *arquivo)
+{
+    char linha[1024];
+    int numero_linha = 1;
+
+    while (fgets(linha, sizeof(linha), arquivo) != NULL)
+    {
+        printf("%4d | %s", numero_linha, linha);
+
+        if (strchr(linha, '\n') == NULL)
+        {
+            printf("\n");
+        }
+
+        numero_linha++;
+    }
+}
+
+int main(int argc, char *argv[])
+{
+    int resultado;
+
+    if (argc != 2)
+    {
+        printf("Uso: %s <arquivo.sndy>\n", argv[0]);
+        return 1;
+    }
+
+    yyin = fopen(argv[1], "r");
+
+    if (yyin == NULL)
+    {
+        printf("Erro ao abrir o arquivo.\n");
+        return 1;
+    }
+
+    global = criarTabelaSimbolo("global", NULL);
+    tabelaAtual = global;
+
+    printf("Código fonte numerado:\n");
+    imprimir_codigo_numerado(yyin);
+    printf("\n");
+
+    rewind(yyin);
+    yylineno = 1;
+
+    resultado = yyparse();
+
+    if (resultado == 0)
+    {
+        printf("\nTabela de símbolos:\n");
+
+        if (global != NULL)
+        {
+            imprimirArvore(global, 0);
+        }
+
+        printf("Programa sintaticamente correto\n");
+    }
+
+    fclose(yyin);
+    return resultado == 0 ? 0 : 1;
+}

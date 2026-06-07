@@ -8,8 +8,6 @@
 #include <stdlib.h>
 #include "translate.tab.h"
 
-int yylineno = 1;
-
 %}
 
 %option noyywrap
@@ -29,7 +27,7 @@ id          [A-Za-z][A-Za-z0-9_]*
 /* Tipos */
 int         "C/G"
 float       "Am/E"
-bool        "Em"
+bool        "Em/B"
 char        "F/C"
 null        "G/D"
 lista       "C7"
@@ -68,18 +66,15 @@ chord       {cifra}{alter}?{chord_body}?{bass}?
 
 {tipo}          { strncpy(yylval.sval, yytext, 255); return TIPO; }
 
-/* Operadores aritmeticos */
 "C/E"           { return OP_ADD; }
 "Dm/F#"         { return OP_SUB; }
 "E/G"           { return OP_MUL; }
 "F/A"           { return OP_DIV; }
 
-/* Operadores logicos */
 "G/B"           { return OP_AND; }
 "Am/C"          { return OP_OR; }
 "Bm/D"          { return OP_NOT; }
 
-/* Operadores relacionais */
 "C7/E"          { return OP_EQ; }
 "Dm7/F#"        { return OP_NEQ; }
 "E7/G"          { return OP_GT; }
@@ -87,15 +82,12 @@ chord       {cifra}{alter}?{chord_body}?{bass}?
 "G7/B"          { return OP_GTE; }
 "A7/C#"         { return OP_LTE; }
 
-/* Declaracao */
 "Dm/A"          { return VAR; }
 "Bm/F#"         { return FUNC; }
 
-/* Operacoes de lista */
 "C7maj"         { return READ_LIST; }
 "Cm7"           { return WRITE_LIST; }
 
-/* Controle de fluxo */
 "Bm"            { return WHILE; }
 "Em"            { return ELSE; }
 "F"             { return IF; }
@@ -103,11 +95,9 @@ chord       {cifra}{alter}?{chord_body}?{bass}?
 "G#dim"         { return KW_BREAK; }
 "A7"            { return KW_CONTINUE; }
 
-/* Blocos */
 "C"             { return BLOCO_INI; }
 "Cm"            { return END_BLOCO; }
 
-/* Literais */
 "true"          { yylval.ival = 1; return LIT_BOOL; }
 "false"         { yylval.ival = 0; return LIT_BOOL; }
 

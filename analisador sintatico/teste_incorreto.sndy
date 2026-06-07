@@ -1,4 +1,4 @@
 // Erro: IF sem nota guia (condicao dentro do bloco faltando)
 F C
-    D/F# x 1 B C
+    C/E x 0 1 B C
 Cm
