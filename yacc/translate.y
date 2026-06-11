@@ -111,7 +111,6 @@ extern TabelaSimbolo *tabelaAtual;
 %token <sval> ID
 %token <sval> ACORDE_LIVRE
 
-%nonassoc DECL_SEM_INICIALIZACAO
 %nonassoc ID LIT_INT LIT_FLOAT LIT_CHAR LIT_STRING LIT_BOOL ACORDE_LIVRE
 
 %%
@@ -143,7 +142,7 @@ decl
  * TIPO Dm/A id Cm operando BC  →  com valor inicial
  * ---------------------------------------------------------- */
 var_decl
-    : TIPO VAR ID END_BLOCO %prec DECL_SEM_INICIALIZACAO
+    : TIPO VAR ID END_BLOCO FIM_LINHA
         { inserir_simbolo($3, $1, "variavel", yylineno); }
     | TIPO VAR ID END_BLOCO operando FIM_LINHA
         { inserir_simbolo($3, $1, "variavel", yylineno); }
