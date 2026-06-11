@@ -133,7 +133,6 @@ char *tipoParaString(Tipo tipo)
         case TIPO_INT:   return "Int";
         case TIPO_FLOAT: return "Float";
         case TIPO_BOOL:  return "Bool";
-        case TIPO_CHAR:  return "Char";
         case TIPO_NULL:  return "Null";
         case TIPO_LISTA: return "Lista";
         default:         return "Desconhecido";

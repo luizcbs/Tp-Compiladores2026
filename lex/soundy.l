@@ -19,8 +19,6 @@ comment     "//"[^\n]*
 /* Literais */
 float_lit   [0-9]+"."[0-9]+
 int_lit     [0-9]+
-char_lit    '.'
-string_lit  \"[^\"]*\"
 
 id          [A-Za-z][A-Za-z0-9_]*
 
@@ -28,10 +26,9 @@ id          [A-Za-z][A-Za-z0-9_]*
 int         "C/G"
 float       "Am/E"
 bool        "Em/B"
-char        "F/C"
 null        "G/D"
 lista       "C7"
-tipo        ({int}|{float}|{bool}|{char}|{null}|{lista})
+tipo        ({int}|{float}|{bool}|{null}|{lista})
 
 /* Acordes */
 cifra       [A-G]
@@ -103,8 +100,6 @@ chord       {cifra}{alter}?{chord_body}?{bass}?
 
 {float_lit}     { yylval.fval = atof(yytext); return LIT_FLOAT; }
 {int_lit}       { yylval.ival = atoi(yytext); return LIT_INT; }
-{char_lit}      { strncpy(yylval.sval, yytext, 255); return LIT_CHAR; }
-{string_lit}    { strncpy(yylval.sval, yytext, 255); return LIT_STRING; }
 
 {chord}         { strncpy(yylval.sval, yytext, 255); return ACORDE_LIVRE; }
 

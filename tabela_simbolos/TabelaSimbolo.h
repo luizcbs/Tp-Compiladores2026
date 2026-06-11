@@ -12,7 +12,6 @@ typedef enum {
     TIPO_INT,
     TIPO_FLOAT,
     TIPO_BOOL,
-    TIPO_CHAR,
     TIPO_NULL,
     TIPO_LISTA
 } Tipo;

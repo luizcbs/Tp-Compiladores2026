@@ -103,15 +103,13 @@ extern TabelaSimbolo *tabelaAtual;
 /* Literais */
 %token <ival> LIT_INT
 %token <fval> LIT_FLOAT
-%token <sval> LIT_CHAR
-%token <sval> LIT_STRING
 %token <ival> LIT_BOOL
 
 /* Identificadores e acordes livres */
 %token <sval> ID
 %token <sval> ACORDE_LIVRE
 
-%nonassoc ID LIT_INT LIT_FLOAT LIT_CHAR LIT_STRING LIT_BOOL ACORDE_LIVRE
+%nonassoc ID LIT_INT LIT_FLOAT LIT_BOOL ACORDE_LIVRE
 
 %%
 
@@ -199,8 +197,6 @@ operando
     : ID
     | LIT_INT
     | LIT_FLOAT
-    | LIT_CHAR
-    | LIT_STRING
     | LIT_BOOL
     | ACORDE_LIVRE
     ;
@@ -297,7 +293,6 @@ static Tipo tipo_de_texto(const char *tipo)
     if (strcmp(tipo, "int") == 0 || strcmp(tipo, "C/G") == 0) return TIPO_INT;
     if (strcmp(tipo, "float") == 0 || strcmp(tipo, "Am/E") == 0) return TIPO_FLOAT;
     if (strcmp(tipo, "bool") == 0 || strcmp(tipo, "Em/B") == 0) return TIPO_BOOL;
-    if (strcmp(tipo, "char") == 0 || strcmp(tipo, "F/C") == 0) return TIPO_CHAR;
     if (strcmp(tipo, "null") == 0 || strcmp(tipo, "G/D") == 0) return TIPO_NULL;
     if (strcmp(tipo, "lista") == 0 || strcmp(tipo, "C7") == 0) return TIPO_LISTA;
     return TIPO_NULL;
