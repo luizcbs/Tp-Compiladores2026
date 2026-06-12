@@ -45,7 +45,7 @@ void adicionarFilho(TabelaSimbolo *pai, TabelaSimbolo *filho)
     filho->pai = pai;
 }
 
-Simbolo criarSimbolo(char *nome, Tipo tipo, Categoria categoria, int linha)
+Simbolo criarSimbolo(char *nome, Tipo tipo, Categoria categoria, int linha, int tamanhoLista)
 {
     Simbolo s;
 
@@ -54,6 +54,7 @@ Simbolo criarSimbolo(char *nome, Tipo tipo, Categoria categoria, int linha)
     s.tipo = tipo;
     s.categoria = categoria;
     s.linhaDeclaracao = linha;
+    s.tamanhoLista = tamanhoLista;
 
     return s;
 }

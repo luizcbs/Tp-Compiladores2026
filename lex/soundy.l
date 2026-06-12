@@ -27,8 +27,7 @@ id          [A-Za-z][A-Za-z0-9_]*
 int         "C/G"
 float       "Am/E"
 bool        "Em/B"
-lista       "C7"
-tipo        ({int}|{float}|{bool}|{lista})
+tipo        ({int}|{float}|{bool})
 
 /* Acordes */
 cifra       [A-G]
@@ -61,6 +60,7 @@ chord       {cifra}{alter}?{chord_body}?{bass}?
 
 "B"[ \t]+"C"    { return FIM_LINHA; }
 
+"C7"            { strncpy(yylval.sval, yytext, 255); return KW_LISTA; }
 {tipo}          { strncpy(yylval.sval, yytext, 255); return TIPO; }
 
 "C/E"           { return OP_ADD; }

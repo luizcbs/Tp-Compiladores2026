@@ -31,7 +31,7 @@
 extern int yylineno;
 int  yylex(void);
 void yyerror(const char *msg);
-static void inserir_simbolo(const char *nome, const char *tipo, const char *categoria, int linha);
+static void inserir_simbolo(const char *nome, const char *tipo, const char *categoria, int linha, int tamanhoLista);
 static Tipo tipo_de_texto(const char *tipo);
 static Categoria categoria_de_texto(const char *categoria);
 
@@ -56,7 +56,8 @@ extern TabelaSimbolo *tabelaAtual;
 %token FIM_LINHA
 
 /* Tipos: carregam o nome textual do tipo */
-%token <sval> TIPO   /* C/G=int  Am/E=float  Em/B=bool  F/C=char  G/D=null  C7=lista */
+%token <sval> TIPO   /* C/G=int  Am/E=float  Em/B=bool  F/C=char*/
+%token <sval> KW_LISTA /* C7=lista */
 
 /* Palavras-chave de declaracao */
 %token VAR            /* Dm/A  — declara variavel          */
@@ -146,9 +147,11 @@ decl
  * ---------------------------------------------------------- */
 var_decl
     : TIPO VAR ID END_BLOCO FIM_LINHA
-        { inserir_simbolo($3, $1, "variavel", yylineno); }
+        { inserir_simbolo($3, $1, "variavel", yylineno, 0); }
     | TIPO VAR ID END_BLOCO operando FIM_LINHA
-        { inserir_simbolo($3, $1, "variavel", yylineno); }
+        { inserir_simbolo($3, $1, "variavel", yylineno, 0); }
+    | KW_LISTA VAR ID END_BLOCO LIT_INT FIM_LINHA
+        { inserir_simbolo($3, $1, "variavel", yylineno, $5); }
     ;
 
 /* ----------------------------------------------------------
@@ -156,9 +159,9 @@ var_decl
  * ---------------------------------------------------------- */
 func_decl
     : TIPO FUNC ID param_list BLOCO_INI stmt_list END_BLOCO
-        { inserir_simbolo($3, $1, "funcao", yylineno); }
+        { inserir_simbolo($3, $1, "funcao", yylineno, 0); }
     | TIPO FUNC ID BLOCO_INI stmt_list END_BLOCO
-        { inserir_simbolo($3, $1, "funcao", yylineno); }
+        { inserir_simbolo($3, $1, "funcao", yylineno, 0); }
     ;
 
 /* Parametros: lista de pares TIPO ID listados antes do 'C' */
@@ -310,7 +313,7 @@ static Categoria categoria_de_texto(const char *categoria)
     return CAT_VARIAVEL;
 }
 
-static void inserir_simbolo(const char *nome, const char *tipo, const char *categoria, int linha)
+static void inserir_simbolo(const char *nome, const char *tipo, const char *categoria, int linha, int tamanhoLista)
 {
     if (tabelaAtual == NULL)
     {
@@ -323,7 +326,8 @@ static void inserir_simbolo(const char *nome, const char *tipo, const char *cate
             (char *)nome,
             tipo_de_texto(tipo),
             categoria_de_texto(categoria),
-            linha
+            linha,
+            tamanhoLista
         )
     );
 }
