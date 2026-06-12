@@ -62,6 +62,10 @@ extern TabelaSimbolo *tabelaAtual;
 %token VAR            /* Dm/A  — declara variavel          */
 %token FUNC           /* Bm/F# — declara funcao            */
 
+/* Chamada de funcao */
+%token CALL           /* A/C# — chama funcao              */
+
+
 /* Controle de fluxo */
 %token IF             /* F     */
 %token ELSE           /* Em    */
@@ -104,6 +108,7 @@ extern TabelaSimbolo *tabelaAtual;
 %token <ival> LIT_INT
 %token <fval> LIT_FLOAT
 %token <ival> LIT_BOOL
+%token LIT_NULL
 
 /* Identificadores e acordes livres */
 %token <sval> ID
@@ -198,6 +203,7 @@ operando
     | LIT_INT
     | LIT_FLOAT
     | LIT_BOOL
+    | LIT_NULL
     | ACORDE_LIVRE
     ;
 
@@ -263,11 +269,11 @@ continue_stmt
 /* ----------------------------------------------------------
  * CHAMADA DE FUNCAO (Function Call)
  *
- * Sintaxe: id operando1 operando2 ... BC
- * Exemplo: soma 10 20 B C
+ * Sintaxe: CALL dest id_funcao operando1 operando2 ... BC
+ * Exemplo: CALL resultado soma 10 20 B C
  * ---------------------------------------------------------- */
 func_call_stmt
-    : ID operando_list FIM_LINHA
+    : CALL ID ID operando_list FIM_LINHA
     ;
 
 operando_list
@@ -293,9 +299,8 @@ static Tipo tipo_de_texto(const char *tipo)
     if (strcmp(tipo, "int") == 0 || strcmp(tipo, "C/G") == 0) return TIPO_INT;
     if (strcmp(tipo, "float") == 0 || strcmp(tipo, "Am/E") == 0) return TIPO_FLOAT;
     if (strcmp(tipo, "bool") == 0 || strcmp(tipo, "Em/B") == 0) return TIPO_BOOL;
-    if (strcmp(tipo, "null") == 0 || strcmp(tipo, "G/D") == 0) return TIPO_NULL;
     if (strcmp(tipo, "lista") == 0 || strcmp(tipo, "C7") == 0) return TIPO_LISTA;
-    return TIPO_NULL;
+    return TIPO_INVALIDO;
 }
 
 static Categoria categoria_de_texto(const char *categoria)

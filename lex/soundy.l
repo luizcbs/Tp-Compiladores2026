@@ -19,6 +19,7 @@ comment     "//"[^\n]*
 /* Literais */
 float_lit   [0-9]+"."[0-9]+
 int_lit     [0-9]+
+null        "G/D"
 
 id          [A-Za-z][A-Za-z0-9_]*
 
@@ -26,9 +27,8 @@ id          [A-Za-z][A-Za-z0-9_]*
 int         "C/G"
 float       "Am/E"
 bool        "Em/B"
-null        "G/D"
 lista       "C7"
-tipo        ({int}|{float}|{bool}|{null}|{lista})
+tipo        ({int}|{float}|{bool}|{lista})
 
 /* Acordes */
 cifra       [A-G]
@@ -81,6 +81,7 @@ chord       {cifra}{alter}?{chord_body}?{bass}?
 
 "Dm/A"          { return VAR; }
 "Bm/F#"         { return FUNC; }
+"A/C#"          { return CALL; }
 
 "C7maj"         { return READ_LIST; }
 "Cm7"           { return WRITE_LIST; }
@@ -97,6 +98,8 @@ chord       {cifra}{alter}?{chord_body}?{bass}?
 
 "true"          { yylval.ival = 1; return LIT_BOOL; }
 "false"         { yylval.ival = 0; return LIT_BOOL; }
+
+{null}          { return LIT_NULL; }
 
 {float_lit}     { yylval.fval = atof(yytext); return LIT_FLOAT; }
 {int_lit}       { yylval.ival = atoi(yytext); return LIT_INT; }

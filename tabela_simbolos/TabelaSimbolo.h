@@ -12,8 +12,8 @@ typedef enum {
     TIPO_INT,
     TIPO_FLOAT,
     TIPO_BOOL,
-    TIPO_NULL,
-    TIPO_LISTA
+    TIPO_LISTA,
+    TIPO_INVALIDO
 } Tipo;
 
 typedef enum {
