@@ -1,0 +1,22 @@
+// C/E contador 0 0 B C
+C/E G G F#m Cmaj7 G#m Cmaj7 G#m B C
+
+// C/E um 0 1 B C
+C/E G A F#m Cmaj7 G#m Dmaj7 G#m B C
+
+// C/E limite 0 5 B C
+C/E A D F#m Cmaj7 G#m Dmaj7 Dmaj7 G#m B C
+
+// F7/A continua contador limite B C
+F7/A D E F#m G G F#m A D F#m B C
+
+Bm C
+    // continua
+    D E F#m B C
+    
+    // C/E contador contador um B C
+    C/E G G F#m G G F#m G A F#m B C
+    
+    // F7/A continua contador limite B C
+    F7/A D E F#m G G F#m A D F#m B C
+Cm

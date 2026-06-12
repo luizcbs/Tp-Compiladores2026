@@ -17,7 +17,6 @@ newline     \n
 comment     "//"[^\n]*
 
 /* Literais */
-float_lit   [0-9]+"."[0-9]+
 null        "G/D"
 
 /* Alfabeto Quaternário Musical (Base 4) e Identificadores */
@@ -102,7 +101,6 @@ chord       {cifra}{alter}?{chord_body}?{bass}?
 
 {null}          { return LIT_NULL; }
 
-{float_lit}     { yylval.fval = atof(yytext); return LIT_FLOAT; }
 
 ({letra_var}[ \t\n]*)+"F#m" { 
                 /* 1. Remove espacos e o terminador F#m para salvar um nome limpo */
@@ -120,6 +118,44 @@ chord       {cifra}{alter}?{chord_body}?{bass}?
                 
                 strncpy(yylval.sval, clean_name, 255);
                 return ID; 
+            }
+
+({letra_num}[ \t\n]*)+"Bdim"[ \t\n]*({letra_num}[ \t\n]*)+"G#m" { 
+                /* Processa floats em Base 4: parte_inteira Bdim parte_fracionaria G#m */
+                double val = 0.0;
+                double divisor = 4.0;
+                int is_fraction = 0;
+                char *p = yytext;
+
+                while(*p != '\0') {
+                    if(*p == ' ' || *p == '\t' || *p == '\n') { p++; continue; }
+                    if(strncmp(p, "G#m", 3) == 0) break;
+                    
+                    /* Se encontrou a vírgula, ativa o modo fracionário */
+                    if(strncmp(p, "Bdim", 4) == 0) { 
+                        is_fraction = 1; 
+                        p += 4; 
+                        continue; 
+                    }
+                    
+                    int digit = -1;
+                    if(strncmp(p, "Cmaj7", 5) == 0)      { digit = 0; p += 5; }
+                    else if(strncmp(p, "Dmaj7", 5) == 0) { digit = 1; p += 5; }
+                    else if(strncmp(p, "Emaj7", 5) == 0) { digit = 2; p += 5; }
+                    else if(strncmp(p, "Fmaj7", 5) == 0) { digit = 3; p += 5; }
+                    else { p++; continue; }
+
+                    if (!is_fraction) {
+                        /* Antes do Bdim: constrói a parte inteira (val * 4 + digito) */
+                        val = val * 4.0 + digit;
+                    } else {
+                        /* Depois do Bdim: constrói a parte fracionária (digito / divisor) */
+                        val = val + ((double)digit / divisor);
+                        divisor *= 4.0; /* Próxima casa decimal será dividida por 16, depois 64... */
+                    }
+                }
+                yylval.fval = val;
+                return LIT_FLOAT; 
             }
 
 ({letra_num}[ \t\n]*)+"G#m" { 
