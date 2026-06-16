@@ -38,6 +38,8 @@ static Categoria categoria_de_texto(const char *categoria);
 extern TabelaSimbolo *global;
 extern TabelaSimbolo *tabelaAtual;
 
+static void verificar_operacao_binaria(const char *dest_name, const char *op1_name, const char *op2_name, const char *operacao);
+static int is_literal(const char *str);
 %}
 
 /* ==============================================================
@@ -113,6 +115,7 @@ extern TabelaSimbolo *tabelaAtual;
 
 %nonassoc DECL_SEM_INICIALIZACAO
 %nonassoc ID LIT_INT LIT_FLOAT LIT_CHAR LIT_STRING LIT_BOOL ACORDE_LIVRE
+%type <sval> operando
 
 %%
 
@@ -193,39 +196,45 @@ stmt
 
 /* ----------------------------------------------------------
  * OPERANDO
- * Um operando e um identificador ou literal.
- * Aparece como fonte (src) nas instrucoes de tres enderecos.
  * ---------------------------------------------------------- */
 operando
-    : ID
-    | LIT_INT
-    | LIT_FLOAT
-    | LIT_CHAR
-    | LIT_STRING
-    | LIT_BOOL
-    | ACORDE_LIVRE
+    : ID             { strcpy($$, $1); }
+    | LIT_INT        { sprintf($$, "%d", $1); }
+    | LIT_FLOAT      { sprintf($$, "%f", $1); }
+    | LIT_CHAR       { strcpy($$, $1); }
+    | LIT_STRING     { strcpy($$, $1); }
+    | LIT_BOOL       { sprintf($$, "%d", $1); }
+    | ACORDE_LIVRE   { strcpy($$, $1); }
     ;
 
 /* ----------------------------------------------------------
  * OPERACOES BINARIAS DE TRES ENDERECOS (E ATRIBUICAO)
- *
- * Sintaxe: OP dest src1 src2 BC
- * Obs: Para atribuicao direta, usa-se a soma com zero.
- * Ex: C/E flag 0 true B C → flag = 0 + true
  * ---------------------------------------------------------- */
 op_binario
     : OP_ADD ID operando operando FIM_LINHA
+        { verificar_operacao_binaria($2, $3, $4, "soma"); }
     | OP_SUB ID operando operando FIM_LINHA
+        { verificar_operacao_binaria($2, $3, $4, "subtracao"); }
     | OP_MUL ID operando operando FIM_LINHA
+        { verificar_operacao_binaria($2, $3, $4, "multiplicacao"); }
     | OP_DIV ID operando operando FIM_LINHA
+        { verificar_operacao_binaria($2, $3, $4, "divisao"); }
     | OP_AND ID operando operando FIM_LINHA
+        { verificar_operacao_binaria($2, $3, $4, "and"); }
     | OP_OR  ID operando operando FIM_LINHA
+        { verificar_operacao_binaria($2, $3, $4, "or"); }
     | OP_EQ  ID operando operando FIM_LINHA
+        { verificar_operacao_binaria($2, $3, $4, "igual"); }
     | OP_NEQ ID operando operando FIM_LINHA
+        { verificar_operacao_binaria($2, $3, $4, "diferente"); }
     | OP_GT  ID operando operando FIM_LINHA
+        { verificar_operacao_binaria($2, $3, $4, "maior"); }
     | OP_LT  ID operando operando FIM_LINHA
+        { verificar_operacao_binaria($2, $3, $4, "menor"); }
     | OP_GTE ID operando operando FIM_LINHA
+        { verificar_operacao_binaria($2, $3, $4, "maior ou igual"); }
     | OP_LTE ID operando operando FIM_LINHA
+        { verificar_operacao_binaria($2, $3, $4, "menor ou igual"); }
     ;
 
 /* ----------------------------------------------------------
@@ -333,4 +342,99 @@ void yyerror(const char *msg)
 {
     (void)msg;
     printf("Erro próximo a linha %d - Programa sintaticamente incorreto\n", yylineno);
+}
+
+// Função auxiliar para ignorar literais na hora de buscar na Tabela
+static int is_literal(const char *str) {
+    if (str[0] >= '0' && str[0] <= '9') return 1;
+    if (strcmp(str, "0") == 0 || strcmp(str, "1") == 0) return 1; // bools do lexer
+    return 0;
+}
+
+static void verificar_operacao_binaria(const char *dest_name, const char *op1_name, const char *op2_name, const char *operacao) 
+{
+    if (tabelaAtual == NULL) return;
+
+    // 1. Verifica Existência do Destino
+    Simbolo *dest = buscarSimbolo(tabelaAtual, (char*)dest_name);
+    if (dest == NULL) {
+        printf("Erro Semantico (Linha %d): Variavel de destino '%s' nao declarada.\n", yylineno, dest_name);
+        return; 
+    }
+
+    // 2. Verifica Existência do Operando 1 (se não for um número literal)
+    Simbolo *s_op1 = NULL;
+    if (!is_literal(op1_name)) {
+        s_op1 = buscarSimbolo(tabelaAtual, (char*)op1_name);
+        if (s_op1 == NULL) {
+            printf("Erro Semantico (Linha %d): Variavel '%s' nao declarada antes do uso.\n", yylineno, op1_name);
+        }
+    }
+
+    // 3. Verifica Existência do Operando 2 (se não for um número literal)
+    Simbolo *s_op2 = NULL;
+    if (!is_literal(op2_name)) {
+        s_op2 = buscarSimbolo(tabelaAtual, (char*)op2_name);
+        if (s_op2 == NULL) {
+            printf("Erro Semantico (Linha %d): Variavel '%s' nao declarada antes do uso.\n", yylineno, op2_name);
+        }
+    }
+
+    // =========================================================
+    // 4. VERIFICAÇÃO DE TIPOS
+    // =========================================================
+    
+    // A. OPERAÇÕES ARITMÉTICAS
+    if (strcmp(operacao, "soma") == 0 || strcmp(operacao, "subtracao") == 0 || 
+        strcmp(operacao, "multiplicacao") == 0 || strcmp(operacao, "divisao") == 0) 
+    {
+        if (dest->tipo != TIPO_INT && dest->tipo != TIPO_FLOAT) {
+            printf("Erro Semantico (Linha %d): Operacao de '%s' exige destino numerico (Encontrado: '%s').\n", 
+                   yylineno, operacao, dest_name);
+        }
+        
+        if (s_op1 != NULL && s_op1->tipo != TIPO_INT && s_op1->tipo != TIPO_FLOAT) {
+            printf("Erro Semantico (Linha %d): Operando '%s' invalido para conta matematica.\n", yylineno, op1_name);
+        }
+        if (s_op2 != NULL && s_op2->tipo != TIPO_INT && s_op2->tipo != TIPO_FLOAT) {
+            printf("Erro Semantico (Linha %d): Operando '%s' invalido para conta matematica.\n", yylineno, op2_name);
+        }
+    }
+    
+    // B. OPERAÇÕES LÓGICAS (AND, OR)
+    else if (strcmp(operacao, "and") == 0 || strcmp(operacao, "or") == 0) 
+    {
+        if (dest->tipo != TIPO_BOOL) {
+            printf("Erro Semantico (Linha %d): Operacao logica '%s' exige que o destino seja Booleano.\n", yylineno, operacao);
+        }
+        
+        if (s_op1 != NULL && s_op1->tipo != TIPO_BOOL) {
+            printf("Erro Semantico (Linha %d): Operando '%s' deve ser Booleano para a operacao '%s'.\n", yylineno, op1_name, operacao);
+        }
+        if (s_op2 != NULL && s_op2->tipo != TIPO_BOOL) {
+            printf("Erro Semantico (Linha %d): Operando '%s' deve ser Booleano para a operacao '%s'.\n", yylineno, op2_name, operacao);
+        }
+    }
+
+    // C. OPERAÇÕES RELACIONAIS (Maior, Menor, Igual, Diferente, etc.)
+    else if (strcmp(operacao, "igual") == 0 || strcmp(operacao, "diferente") == 0 || 
+             strcmp(operacao, "maior") == 0 || strcmp(operacao, "menor") == 0 || 
+             strcmp(operacao, "maior ou igual") == 0 || strcmp(operacao, "menor ou igual") == 0) 
+    {
+        // O destino obrigatoriamente precisa ser Bool para guardar o Verdadeiro ou Falso do teste
+        if (dest->tipo != TIPO_BOOL) {
+            printf("Erro Semantico (Linha %d): Operacao relacional '%s' exige destino Booleano (variavel '%s' nao e Bool).\n", 
+                   yylineno, operacao, dest_name);
+        }
+
+        // Operandos de grandeza (>, <, >=, <=) normalmente exigem valores numéricos para comparação
+        if (strcmp(operacao, "igual") != 0 && strcmp(operacao, "diferente") != 0) {
+            if (s_op1 != NULL && s_op1->tipo != TIPO_INT && s_op1->tipo != TIPO_FLOAT) {
+                printf("Erro Semantico (Linha %d): Operando '%s' deve ser numerico para a comparacao '%s'.\n", yylineno, op1_name, operacao);
+            }
+            if (s_op2 != NULL && s_op2->tipo != TIPO_INT && s_op2->tipo != TIPO_FLOAT) {
+                printf("Erro Semantico (Linha %d): Operando '%s' deve ser numerico para a comparacao '%s'.\n", yylineno, op2_name, operacao);
+            }
+        }
+    }
 }

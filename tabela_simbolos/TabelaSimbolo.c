@@ -108,6 +108,27 @@ Simbolo *buscarNaTabelaSimboloAtual(TabelaSimbolo *tabela, char *nome)
     return NULL;
 }
 
+Simbolo *buscarSimbolo(TabelaSimbolo *tabelaAtual, char *nome)
+{
+    TabelaSimbolo *escopoCorrente = tabelaAtual;
+    
+    // Sobe na árvore de escopos até a raiz (global)
+    while (escopoCorrente != NULL)
+    {
+        Simbolo *encontrado = buscarNaTabelaSimboloAtual(escopoCorrente, nome);
+        
+        if (encontrado != NULL)
+        {
+            return encontrado; // Achou!
+        }
+        
+        // Não achou no escopo atual, sobe para o pai
+        escopoCorrente = escopoCorrente->pai;
+    }
+    
+    return NULL; // Realmente não existe em nenhum escopo acima
+}
+
 void entrarTabalaSimbolo(TabelaSimbolo **tabelaAtual,TabelaSimbolo *novaTabela)
 {
     if (novaTabela != NULL)

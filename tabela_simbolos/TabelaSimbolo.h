@@ -54,6 +54,7 @@ Simbolo criarSimbolo(char *nome, Tipo tipo, Categoria categoria, int linha);
 int inserirSimbolo(TabelaSimbolo *tabela, Simbolo simbolo);
 
 Simbolo *buscarNaTabelaSimboloAtual(TabelaSimbolo *tabela, char *nome);
+Simbolo *buscarSimbolo(TabelaSimbolo *tabelaAtual, char *nome);
 
 void entrarTabalaSimbolo(TabelaSimbolo **tabelaAtual,TabelaSimbolo *novaTabela);
 void sairTabelaSimbolo(TabelaSimbolo **tabelaAtual);
