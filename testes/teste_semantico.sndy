@@ -1,0 +1,7 @@
+// 1. Declarando as variaveis simples (Sintaxe TP2)
+C/G Dm/A numero Cm
+C/G Dm/A outro_numero Cm
+Em/B Dm/A condicao Cm
+
+// ERRO SEMANTICO: Tentar somar um Inteiro com um Booleano
+C/E numero outro_numero condicao B C
