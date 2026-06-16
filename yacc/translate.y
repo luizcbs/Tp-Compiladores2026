@@ -1,131 +1,78 @@
 %{
-/*
- * Soundy Script -- Analisador Sintatico (Trabalho Pratico 2)
- * Topico 3: Gramatica e Analisador Sintatico
- * Este arquivo concentra a gramatica e as acoes semanticas do parser.
- * A interface de execucao do compilador fica em main.c.
- *
- * NOTACAO DE TRES ENDERECOS (Secao 4 da especificacao):
- * OP dest src1 src2 B C  →  dest = src1 OP src2
- *
- * ATRIBUICAO DE VALORES (Estrategia Assembly/RISC):
- * C/E dest 0 src B C     →  dest = 0 + src (Atribuicao direta)
- *
- * ORDEM DA DECLARACAO DE VARIAVEL (Secao 6):
- * TIPO Dm/A id Cm           →  sem valor inicial
- * TIPO Dm/A id Cm val B C   →  com valor inicial
- *
- * CONDICIONAL/REPETICAO (Secao 5):
- * A condicao e a primeira linha DENTRO do bloco (nota guia):
- * F C
- * cond B C     ← nota guia
- * comandos
- * Cm
- */
+/* Analisador Sintatico e GCI - Soundy Script (TP3) */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "TabelaSimbolo.h"
+#include "gci.h"
 
 extern int yylineno;
 int  yylex(void);
 void yyerror(const char *msg);
+
+/* Funcoes auxiliares */
 static void inserir_simbolo(const char *nome, const char *tipo, const char *categoria, int linha);
 static Tipo tipo_de_texto(const char *tipo);
 static Categoria categoria_de_texto(const char *categoria);
 
 extern TabelaSimbolo *global;
 extern TabelaSimbolo *tabelaAtual;
-
 %}
 
-/* ==============================================================
- * %union
- * ============================================================== */
+/* --- Definicao de Tipos --- */
 %union {
     int    ival;
     double fval;
     char   sval[256];
 }
 
-/* ==============================================================
- * DECLARACAO DOS TOKENS
- * ============================================================== */
-
+/* --- Tokens --- */
 %token FIM_LINHA
+%token <sval> TIPO
 
-/* Tipos: carregam o nome textual do tipo */
-%token <sval> TIPO   /* C/G=int  Am/E=float  Em/B=bool  F/C=char  G/D=null  C7=lista */
+/* Palavras-chave */
+%token VAR FUNC
+%token IF ELSE WHILE
+%token KW_RETURN KW_BREAK KW_CONTINUE
 
-/* Palavras-chave de declaracao */
-%token VAR            /* Dm/A  — declara variavel          */
-%token FUNC           /* Bm/F# — declara funcao            */
+/* Blocos */
+%token BLOCO_INI END_BLOCO
 
-/* Controle de fluxo */
-%token IF             /* F     */
-%token ELSE           /* Em    */
-%token WHILE          /* Bm    */
-%token KW_RETURN      /* Am    */
-%token KW_BREAK       /* G#dim */
-%token KW_CONTINUE    /* A7    */
+/* Listas */
+%token READ_LIST WRITE_LIST
 
-/* Delimitadores de bloco
- * IMPORTANTE: END_BLOCO (Cm) tem dupla funcao na linguagem:
- * 1. Termina blocos if/while/func:  F C ... Cm
- * 2. Termina nomes em declaracoes:  C/G Dm/A x Cm  */
-%token BLOCO_INI      /* C  */
-%token END_BLOCO      /* Cm */
+/* Operadores Aritmeticos */
+%token OP_ADD OP_SUB OP_MUL OP_DIV
 
-/* Operacoes de lista */
-%token READ_LIST      /* C7maj — dest = lista[idx]    */
-%token WRITE_LIST     /* Cm7   — lista[idx] = valor   */
+/* Operadores Logicos e Relacionais */
+%token OP_AND OP_OR OP_NOT
+%token OP_EQ OP_NEQ OP_GT OP_LT OP_GTE OP_LTE
 
-/* Operadores aritmeticos (viram comandos de tres enderecos) */
-%token OP_ADD         /* C/E   — soma          */
-%token OP_SUB         /* Dm/F# — subtracao     */
-%token OP_MUL         /* E/G   — multiplicacao */
-%token OP_DIV         /* F/A   — divisao       */
-
-/* Operadores logicos */
-%token OP_AND         /* G/B  — e logico        */
-%token OP_OR          /* Am/C — ou logico       */
-%token OP_NOT         /* Bm/D — negacao (unario) */
-
-/* Operadores relacionais */
-%token OP_EQ          /* C7/E   — igual          */
-%token OP_NEQ         /* Dm7/F# — diferente      */
-%token OP_GT          /* E7/G   — maior que      */
-%token OP_LT          /* F7/A   — menor que      */
-%token OP_GTE         /* G7/B   — maior ou igual */
-%token OP_LTE         /* A7/C#  — menor ou igual */
-
-/* Literais */
+/* Literais e Identificadores */
 %token <ival> LIT_INT
 %token <fval> LIT_FLOAT
 %token <sval> LIT_CHAR
 %token <sval> LIT_STRING
 %token <ival> LIT_BOOL
-
-/* Identificadores e acordes livres */
 %token <sval> ID
 %token <sval> ACORDE_LIVRE
 
+/* Mapeamento para GCI e Tabela de Simbolos */
+%type <sval> operando
+
+/* Precedencias para evitar Shift/Reduce */
 %nonassoc DECL_SEM_INICIALIZACAO
 %nonassoc ID LIT_INT LIT_FLOAT LIT_CHAR LIT_STRING LIT_BOOL ACORDE_LIVRE
 
 %%
-
-/* ==============================================================
- * REGRAS DE PRODUCAO
- * ============================================================== */
+/* --- Regras de Producao --- */
 
 program
     : decl_list
-    | /* programa vazio */
+    |
     ;
 
-/* Um programa e uma lista de declaracoes e comandos */
 decl_list
     : decl_list decl
     | decl
@@ -136,12 +83,7 @@ decl
     | stmt
     ;
 
-/* ----------------------------------------------------------
- * DECLARACAO DE VARIAVEL
- *
- * TIPO Dm/A id Cm              →  sem valor inicial
- * TIPO Dm/A id Cm operando BC  →  com valor inicial
- * ---------------------------------------------------------- */
+/* Declaracao de variavel */
 var_decl
     : TIPO VAR ID END_BLOCO %prec DECL_SEM_INICIALIZACAO
         { inserir_simbolo($3, $1, "variavel", yylineno); }
@@ -149,9 +91,7 @@ var_decl
         { inserir_simbolo($3, $1, "variavel", yylineno); }
     ;
 
-/* ----------------------------------------------------------
- * DECLARACAO DE FUNCAO
- * ---------------------------------------------------------- */
+/* Declaracao de funcao */
 func_decl
     : TIPO FUNC ID param_list BLOCO_INI stmt_list END_BLOCO
         { inserir_simbolo($3, $1, "funcao", yylineno); }
@@ -159,7 +99,6 @@ func_decl
         { inserir_simbolo($3, $1, "funcao", yylineno); }
     ;
 
-/* Parametros: lista de pares TIPO ID listados antes do 'C' */
 param_list
     : param_list param
     | param
@@ -167,14 +106,13 @@ param_list
 
 param
     : TIPO ID
+        { inserir_simbolo($2, $1, "parametro", yylineno); }
     ;
 
-/* ----------------------------------------------------------
- * LISTA DE COMANDOS
- * ---------------------------------------------------------- */
+/* Comandos */
 stmt_list
     : stmt_list stmt
-    | /* vazio (corpo pode ser vazio) */
+    |
     ;
 
 stmt
@@ -191,107 +129,125 @@ stmt
     | func_call_stmt
     ;
 
-/* ----------------------------------------------------------
- * OPERANDO
- * Um operando e um identificador ou literal.
- * Aparece como fonte (src) nas instrucoes de tres enderecos.
- * ---------------------------------------------------------- */
+/* Tratamento de Operandos (Convertendo para string para o GCI) */
 operando
-    : ID
-    | LIT_INT
-    | LIT_FLOAT
-    | LIT_CHAR
-    | LIT_STRING
-    | LIT_BOOL
-    | ACORDE_LIVRE
+    : ID           { strcpy($$, $1); }
+    | LIT_INT      { sprintf($$, "%d", $1); }
+    | LIT_FLOAT    { sprintf($$, "%.2f", $1); }
+    | LIT_CHAR     { strcpy($$, $1); }
+    | LIT_STRING   { strcpy($$, $1); }
+    | LIT_BOOL     { sprintf($$, "%d", $1); }
+    | ACORDE_LIVRE { strcpy($$, $1); }
     ;
 
-/* ----------------------------------------------------------
- * OPERACOES BINARIAS DE TRES ENDERECOS (E ATRIBUICAO)
- *
- * Sintaxe: OP dest src1 src2 BC
- * Obs: Para atribuicao direta, usa-se a soma com zero.
- * Ex: C/E flag 0 true B C → flag = 0 + true
- * ---------------------------------------------------------- */
+/* --- Operacoes (Injetando Código de 3 Enderecos) --- */
 op_binario
-    : OP_ADD ID operando operando FIM_LINHA
-    | OP_SUB ID operando operando FIM_LINHA
-    | OP_MUL ID operando operando FIM_LINHA
-    | OP_DIV ID operando operando FIM_LINHA
-    | OP_AND ID operando operando FIM_LINHA
-    | OP_OR  ID operando operando FIM_LINHA
-    | OP_EQ  ID operando operando FIM_LINHA
-    | OP_NEQ ID operando operando FIM_LINHA
-    | OP_GT  ID operando operando FIM_LINHA
-    | OP_LT  ID operando operando FIM_LINHA
-    | OP_GTE ID operando operando FIM_LINHA
-    | OP_LTE ID operando operando FIM_LINHA
+    : OP_ADD ID operando operando FIM_LINHA { gci_emitir_operacao("ADD", $2, $3, $4); }
+    | OP_SUB ID operando operando FIM_LINHA { gci_emitir_operacao("SUB", $2, $3, $4); }
+    | OP_MUL ID operando operando FIM_LINHA { gci_emitir_operacao("MUL", $2, $3, $4); }
+    | OP_DIV ID operando operando FIM_LINHA { gci_emitir_operacao("DIV", $2, $3, $4); }
+    | OP_AND ID operando operando FIM_LINHA { gci_emitir_operacao("AND", $2, $3, $4); }
+    | OP_OR  ID operando operando FIM_LINHA { gci_emitir_operacao("OR",  $2, $3, $4); }
+    | OP_EQ  ID operando operando FIM_LINHA { gci_emitir_operacao("SEQ", $2, $3, $4); }
+    | OP_NEQ ID operando operando FIM_LINHA { gci_emitir_operacao("SNE", $2, $3, $4); }
+    | OP_GT  ID operando operando FIM_LINHA { gci_emitir_operacao("SGT", $2, $3, $4); }
+    | OP_LT  ID operando operando FIM_LINHA { gci_emitir_operacao("SLT", $2, $3, $4); }
+    | OP_GTE ID operando operando FIM_LINHA { gci_emitir_operacao("SGE", $2, $3, $4); }
+    | OP_LTE ID operando operando FIM_LINHA { gci_emitir_operacao("SLE", $2, $3, $4); }
     ;
 
-/* ----------------------------------------------------------
- * OPERACAO UNARIA DE TRES ENDERECOS
- * ---------------------------------------------------------- */
 op_unario
-    : OP_NOT ID operando FIM_LINHA
+    : OP_NOT ID operando FIM_LINHA { gci_emitir_unario("NOT", $2, $3); }
     ;
 
-/* ----------------------------------------------------------
- * IF / IF-ELSE
- * ---------------------------------------------------------- */
+/* --- Controle de Fluxo (Prefixos resolvem os conflitos do Yacc) --- */
+if_prefix
+    : IF BLOCO_INI ID FIM_LINHA 
+        {
+            strcpy($<sval>$, gci_nova_label());
+            gci_emitir_jump_condicional($3, $<sval>$);
+        }
+    ;
+
 if_stmt
-    : IF BLOCO_INI ID FIM_LINHA stmt_list END_BLOCO
-    | IF BLOCO_INI ID FIM_LINHA stmt_list END_BLOCO ELSE BLOCO_INI stmt_list END_BLOCO
+    : if_prefix stmt_list END_BLOCO 
+        {
+            gci_emitir_label($<sval>1); 
+        }
+    | if_prefix stmt_list END_BLOCO ELSE BLOCO_INI 
+        {
+            strcpy($<sval>$, gci_nova_label()); 
+            gci_emitir_jump($<sval>$);   
+            gci_emitir_label($<sval>1);  
+        }
+      stmt_list END_BLOCO 
+        {
+            gci_emitir_label($<sval>6);
+        }
     ;
 
-/* ----------------------------------------------------------
- * WHILE
- * ---------------------------------------------------------- */
+while_prefix
+    : WHILE BLOCO_INI 
+        {
+            char* inicio = gci_nova_label();
+            char* fim = gci_nova_label();
+            gci_push_while(inicio, fim);
+            
+            gci_emitir_label(inicio);
+            strcpy($<sval>$, fim);
+        }
+    ;
+
 while_stmt
-    : WHILE BLOCO_INI ID FIM_LINHA stmt_list END_BLOCO
+    : while_prefix ID FIM_LINHA 
+        {
+            gci_emitir_jump_condicional($2, $<sval>1);
+        }
+      stmt_list END_BLOCO 
+        {
+            gci_emitir_jump(gci_get_while_inicio());
+            gci_emitir_label(gci_get_while_fim());
+            gci_pop_while();
+        }
     ;
 
-/* ----------------------------------------------------------
- * RETURN / BREAK / CONTINUE
- * ---------------------------------------------------------- */
 return_stmt
-    : KW_RETURN operando FIM_LINHA
+    : KW_RETURN operando FIM_LINHA 
     ;
 
 break_stmt
-    : KW_BREAK FIM_LINHA
+    : KW_BREAK FIM_LINHA 
+        { gci_emitir_jump(gci_get_while_fim()); }
     ;
 
 continue_stmt
-    : KW_CONTINUE FIM_LINHA
+    : KW_CONTINUE FIM_LINHA 
+        { gci_emitir_jump(gci_get_while_inicio()); }
     ;
 
-/* ----------------------------------------------------------
- * CHAMADA DE FUNCAO (Function Call)
- *
- * Sintaxe: id operando1 operando2 ... BC
- * Exemplo: soma 10 20 B C
- * ---------------------------------------------------------- */
+/* --- Chamadas de Funcao e Listas --- */
 func_call_stmt
     : ID operando_list FIM_LINHA
+        { gci_emitir_call("dest", $1); }
     ;
 
 operando_list
     : operando_list operando
-    | /* vazio */
+    |
     ;
 
-/* ----------------------------------------------------------
- * OPERACOES DE LISTA
- * ---------------------------------------------------------- */
 read_list_stmt
-    : READ_LIST ID ID operando FIM_LINHA
+    : READ_LIST ID ID operando FIM_LINHA 
+        { gci_emitir_read_list($2, $3, $4); }
     ;
 
 write_list_stmt
-    : WRITE_LIST ID operando operando FIM_LINHA
+    : WRITE_LIST ID operando operando FIM_LINHA 
+        { gci_emitir_write_list($2, $3, $4); }
     ;
 
 %%
+/* --- Codigo C Auxiliar --- */
 
 static Tipo tipo_de_texto(const char *tipo)
 {
