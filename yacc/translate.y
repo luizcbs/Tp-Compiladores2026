@@ -1,440 +1,744 @@
-%{
-/*
- * Soundy Script -- Analisador Sintatico (Trabalho Pratico 2)
- * Topico 3: Gramatica e Analisador Sintatico
- * Este arquivo concentra a gramatica e as acoes semanticas do parser.
- * A interface de execucao do compilador fica em main.c.
+/* translate.y — Soundy Script — TP3: Análise Semântica
+ * Tópico 3: Gabriel | Semântica: Kayo, Rodrigo
+ * yyerror() e main() ficam no Tópico 4; tabela_simbolos no Tópico 2.
  *
- * NOTACAO DE TRES ENDERECOS (Secao 4 da especificacao):
- * OP dest src1 src2 B C  →  dest = src1 OP src2
- *
- * ATRIBUICAO DE VALORES (Estrategia Assembly/RISC):
- * C/E dest 0 src B C     →  dest = 0 + src (Atribuicao direta)
- *
- * ORDEM DA DECLARACAO DE VARIAVEL (Secao 6):
- * TIPO Dm/A id Cm           →  sem valor inicial
- * TIPO Dm/A id Cm val B C   →  com valor inicial
- *
- * CONDICIONAL/REPETICAO (Secao 5):
- * A condicao e a primeira linha DENTRO do bloco (nota guia):
- * F C
- * cond B C     ← nota guia
- * comandos
- * Cm
+ * Tokens e %union conferidos contra lex/soundy.l real do grupo.
+ * Funções de tabela (buscarSimbolo, criarSimbolo, tipoParaString)
+ * usam a API real de TabelaSimbolo.h — não reimplementadas aqui.
  */
 
+%code requires {
+    #include "TabelaSimbolo.h"
+}
+
+%{
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "TabelaSimbolo.h"
 
-extern int yylineno;
+extern int  yylineno;
+extern TabelaSimbolo *tabelaAtual;
 int  yylex(void);
 void yyerror(const char *msg);
-static void inserir_simbolo(const char *nome, const char *tipo, const char *categoria, int linha);
-static Tipo tipo_de_texto(const char *tipo);
-static Categoria categoria_de_texto(const char *categoria);
 
-extern TabelaSimbolo *global;
-extern TabelaSimbolo *tabelaAtual;
+/* ── Assinaturas de função (nº de parâmetros) ──
+ * O retorno da função já fica em Simbolo.tipo (inserido como "funcao");
+ * só o nº de parâmetros não existe na tabela do Tópico 2. */
+typedef struct { char nome[50]; int num_params; } AssinaturaFuncao;
+static AssinaturaFuncao assinaturas[100];
+static int              num_assinaturas = 0;
 
-static void verificar_operacao_binaria(const char *dest_name, const char *op1_name, const char *op2_name, const char *operacao);
-static int is_literal(const char *str);
-%}
+/* ── Contexto da função em declaração ── */
+static Tipo tipo_retorno_atual    = TIPO_NULL;
+static char nome_funcao_atual[50] = "";
+static int  contagem_params_atual = 0;
+static int  contagem_args_atual   = 0;
 
-/* ==============================================================
- * %union
- * ============================================================== */
-%union {
-    int    ival;
-    double fval;
-    char   sval[256];
+static void erro_semantico(const char *msg, int linha)
+{
+    fprintf(stderr, "Erro semantico na linha %d: %s\n", linha, msg);
 }
 
-/* ==============================================================
- * DECLARACAO DOS TOKENS
- * ============================================================== */
+/* Acorde/texto → Tipo (espelha o que soundy.l reconhece como TIPO) */
+static Tipo tipo_de_texto(const char *s)
+{
+    if (strcmp(s, "C/G")  == 0) return TIPO_INT;
+    if (strcmp(s, "Am/E") == 0) return TIPO_FLOAT;
+    if (strcmp(s, "Em/B") == 0) return TIPO_BOOL;
+    if (strcmp(s, "F/C")  == 0) return TIPO_CHAR;
+    if (strcmp(s, "G/D")  == 0) return TIPO_NULL;
+    if (strcmp(s, "C7")   == 0) return TIPO_LISTA;
+    return TIPO_NULL;
+}
 
+static Categoria categoria_de_texto(const char *s)
+{
+    if (strcmp(s, "funcao")    == 0) return CAT_FUNCAO;
+    if (strcmp(s, "parametro") == 0) return CAT_PARAMETRO;
+    return CAT_VARIAVEL;
+}
+
+/* Monta Simbolo via criarSimbolo() (Tópico 2) e insere na tabela atual. */
+static void inserir_simbolo(char *nome, char *tipo_str, char *cat_str, int linha)
+{
+    Simbolo s = criarSimbolo(nome, tipo_de_texto(tipo_str),
+                              categoria_de_texto(cat_str), linha);
+    inserirSimbolo(tabelaAtual, s);
+}
+
+static void registrar_assinatura(const char *nome, int params)
+{
+    if (num_assinaturas >= 100) return;
+    strncpy(assinaturas[num_assinaturas].nome, nome, 49);
+    assinaturas[num_assinaturas].num_params = params;
+    num_assinaturas++;
+}
+
+static AssinaturaFuncao *buscar_assinatura(const char *nome)
+{
+    int i;
+    for (i = 0; i < num_assinaturas; i++)
+        if (strcmp(assinaturas[i].nome, nome) == 0)
+            return &assinaturas[i];
+    return NULL;
+}
+
+/* Retorna 1 se o tipo é numérico (int ou float). */
+static int tipo_numerico(Tipo t)
+{
+    return t == TIPO_INT || t == TIPO_FLOAT;
+}
+
+/* Retorna 1 se os dois tipos podem ser comparados entre si. */
+static int tipos_comparaveis(Tipo a, Tipo b)
+{
+    if (a == TIPO_NULL || b == TIPO_NULL) return 1;
+    return a == b;
+}
+%}
+
+%union {
+    int    ival;      /* LIT_INT, LIT_BOOL                 */
+    double fval;      /* LIT_FLOAT                          */
+    char   sval[256]; /* ID, TIPO, LIT_CHAR/STRING, ACORDE_LIVRE */
+    Tipo   tval;      /* propagação de tipo (TP3)           */
+}
+
+/* ── Tokens — nomes idênticos aos retornados por lex/soundy.l ── */
 %token FIM_LINHA
+%token <sval> TIPO
+%token VAR FUNC
+%token IF ELSE WHILE
+%token KW_RETURN KW_BREAK KW_CONTINUE
+%token BLOCO_INI END_BLOCO
+%token READ_LIST WRITE_LIST
 
-/* Tipos: carregam o nome textual do tipo */
-%token <sval> TIPO   /* C/G=int  Am/E=float  Em/B=bool  F/C=char  G/D=null  C7=lista */
+%token OP_ADD OP_SUB OP_MUL OP_DIV
+%token OP_AND OP_OR OP_NOT
+%token OP_EQ OP_NEQ OP_GT OP_LT OP_GTE OP_LTE
 
-/* Palavras-chave de declaracao */
-%token VAR            /* Dm/A  — declara variavel          */
-%token FUNC           /* Bm/F# — declara funcao            */
-
-/* Controle de fluxo */
-%token IF             /* F     */
-%token ELSE           /* Em    */
-%token WHILE          /* Bm    */
-%token KW_RETURN      /* Am    */
-%token KW_BREAK       /* G#dim */
-%token KW_CONTINUE    /* A7    */
-
-/* Delimitadores de bloco
- * IMPORTANTE: END_BLOCO (Cm) tem dupla funcao na linguagem:
- * 1. Termina blocos if/while/func:  F C ... Cm
- * 2. Termina nomes em declaracoes:  C/G Dm/A x Cm  */
-%token BLOCO_INI      /* C  */
-%token END_BLOCO      /* Cm */
-
-/* Operacoes de lista */
-%token READ_LIST      /* C7maj — dest = lista[idx]    */
-%token WRITE_LIST     /* Cm7   — lista[idx] = valor   */
-
-/* Operadores aritmeticos (viram comandos de tres enderecos) */
-%token OP_ADD         /* C/E   — soma          */
-%token OP_SUB         /* Dm/F# — subtracao     */
-%token OP_MUL         /* E/G   — multiplicacao */
-%token OP_DIV         /* F/A   — divisao       */
-
-/* Operadores logicos */
-%token OP_AND         /* G/B  — e logico        */
-%token OP_OR          /* Am/C — ou logico       */
-%token OP_NOT         /* Bm/D — negacao (unario) */
-
-/* Operadores relacionais */
-%token OP_EQ          /* C7/E   — igual          */
-%token OP_NEQ         /* Dm7/F# — diferente      */
-%token OP_GT          /* E7/G   — maior que      */
-%token OP_LT          /* F7/A   — menor que      */
-%token OP_GTE         /* G7/B   — maior ou igual */
-%token OP_LTE         /* A7/C#  — menor ou igual */
-
-/* Literais */
 %token <ival> LIT_INT
 %token <fval> LIT_FLOAT
 %token <sval> LIT_CHAR
 %token <sval> LIT_STRING
 %token <ival> LIT_BOOL
-
-/* Identificadores e acordes livres */
 %token <sval> ID
 %token <sval> ACORDE_LIVRE
 
+%type <tval> operando
+
+/* Resolve a ambiguidade: TIPO VAR ID END_BLOCO termina aqui,
+ * ou continua para "operando FIM_LINHA"? Ver var_decl. */
 %nonassoc DECL_SEM_INICIALIZACAO
 %nonassoc ID LIT_INT LIT_FLOAT LIT_CHAR LIT_STRING LIT_BOOL ACORDE_LIVRE
-%type <sval> operando
 
 %%
 
-/* ==============================================================
- * REGRAS DE PRODUCAO
- * ============================================================== */
+program   : decl_list | %empty ;
+decl_list : decl_list decl | decl ;
+decl      : func_decl | stmt ;
 
-program
-    : decl_list
-    | /* programa vazio */
-    ;
-
-/* Um programa e uma lista de declaracoes e comandos */
-decl_list
-    : decl_list decl
-    | decl
-    ;
-
-decl
-    : func_decl
-    | stmt
-    ;
-
-/* ----------------------------------------------------------
- * DECLARACAO DE VARIAVEL
- *
- * TIPO Dm/A id Cm              →  sem valor inicial
- * TIPO Dm/A id Cm operando BC  →  com valor inicial
- * ---------------------------------------------------------- */
+/* ══════════════════════════════════════════════════════
+ * DECLARAÇÃO DE VARIÁVEL
+ *   TIPO VAR ID END_BLOCO                    — sem valor inicial
+ *   TIPO VAR ID END_BLOCO operando FIM_LINHA — com valor inicial
+ * Verifica: tipo do valor inicial compatível com tipo declarado.
+ * ══════════════════════════════════════════════════════ */
 var_decl
     : TIPO VAR ID END_BLOCO %prec DECL_SEM_INICIALIZACAO
-        { inserir_simbolo($3, $1, "variavel", yylineno); }
+    {
+        inserir_simbolo($3, $1, "variavel", yylineno);
+    }
+
     | TIPO VAR ID END_BLOCO operando FIM_LINHA
-        { inserir_simbolo($3, $1, "variavel", yylineno); }
+    {
+        Tipo t_decl = tipo_de_texto($1);
+        if ($5 != TIPO_NULL && $5 != t_decl) {
+            char msg[400];
+            snprintf(msg, sizeof(msg),
+                "variavel '%s': valor inicial (%s) incompativel com tipo declarado (%s)",
+                $3, tipoParaString($5), tipoParaString(t_decl));
+            erro_semantico(msg, yylineno);
+        }
+        inserir_simbolo($3, $1, "variavel", yylineno);
+    }
     ;
 
-/* ----------------------------------------------------------
- * DECLARACAO DE FUNCAO
- * ---------------------------------------------------------- */
+/* ══════════════════════════════════════════════════════
+ * DECLARAÇÃO DE FUNÇÃO
+ * func_header reduz logo após "TIPO FUNC ID": insere a função no
+ * escopo pai e já abre o escopo filho (parâmetros entram nele).
+ * ══════════════════════════════════════════════════════ */
 func_decl
-    : TIPO FUNC ID param_list BLOCO_INI stmt_list END_BLOCO
-        { inserir_simbolo($3, $1, "funcao", yylineno); }
-    | TIPO FUNC ID BLOCO_INI stmt_list END_BLOCO
-        { inserir_simbolo($3, $1, "funcao", yylineno); }
+    : func_header param_list BLOCO_INI stmt_list END_BLOCO
+    {
+        registrar_assinatura(nome_funcao_atual, contagem_params_atual);
+        sairTabelaSimbolo(&tabelaAtual);
+    }
+    | func_header BLOCO_INI stmt_list END_BLOCO
+    {
+        registrar_assinatura(nome_funcao_atual, 0);
+        sairTabelaSimbolo(&tabelaAtual);
+    }
     ;
 
-/* Parametros: lista de pares TIPO ID listados antes do 'C' */
-param_list
-    : param_list param
-    | param
+func_header
+    : TIPO FUNC ID
+    {
+        inserir_simbolo($3, $1, "funcao", yylineno);
+        tipo_retorno_atual = tipo_de_texto($1);
+        strncpy(nome_funcao_atual, $3, 49);
+        contagem_params_atual = 0;
+
+        TabelaSimbolo *filho = criarTabelaSimbolo($3, tabelaAtual);
+        adicionarFilho(tabelaAtual, filho);
+        entrarTabalaSimbolo(&tabelaAtual, filho);
+    }
     ;
+
+param_list : param_list param | param ;
 
 param
     : TIPO ID
+    {
+        inserir_simbolo($2, $1, "parametro", yylineno);
+        contagem_params_atual++;
+    }
     ;
 
-/* ----------------------------------------------------------
- * LISTA DE COMANDOS
- * ---------------------------------------------------------- */
-stmt_list
-    : stmt_list stmt
-    | /* vazio (corpo pode ser vazio) */
-    ;
+stmt_list : stmt_list stmt | %empty ;
 
 stmt
-    : var_decl
-    | op_binario
-    | op_unario
-    | if_stmt
-    | while_stmt
-    | return_stmt
-    | break_stmt
-    | continue_stmt
-    | read_list_stmt
-    | write_list_stmt
-    | func_call_stmt
+    : var_decl | op_binario | op_unario
+    | if_stmt | while_stmt | return_stmt
+    | break_stmt | continue_stmt
+    | read_list_stmt | write_list_stmt | func_call_stmt
     ;
 
-/* ----------------------------------------------------------
- * OPERANDO
- * ---------------------------------------------------------- */
-operando
-    : ID             { strcpy($$, $1); }
-    | LIT_INT        { sprintf($$, "%d", $1); }
-    | LIT_FLOAT      { sprintf($$, "%f", $1); }
-    | LIT_CHAR       { strcpy($$, $1); }
-    | LIT_STRING     { strcpy($$, $1); }
-    | LIT_BOOL       { sprintf($$, "%d", $1); }
-    | ACORDE_LIVRE   { strcpy($$, $1); }
-    ;
-
-/* ----------------------------------------------------------
- * OPERACOES BINARIAS DE TRES ENDERECOS (E ATRIBUICAO)
- * ---------------------------------------------------------- */
-op_binario
-    : OP_ADD ID operando operando FIM_LINHA
-        { verificar_operacao_binaria($2, $3, $4, "soma"); }
-    | OP_SUB ID operando operando FIM_LINHA
-        { verificar_operacao_binaria($2, $3, $4, "subtracao"); }
-    | OP_MUL ID operando operando FIM_LINHA
-        { verificar_operacao_binaria($2, $3, $4, "multiplicacao"); }
-    | OP_DIV ID operando operando FIM_LINHA
-        { verificar_operacao_binaria($2, $3, $4, "divisao"); }
-    | OP_AND ID operando operando FIM_LINHA
-        { verificar_operacao_binaria($2, $3, $4, "and"); }
-    | OP_OR  ID operando operando FIM_LINHA
-        { verificar_operacao_binaria($2, $3, $4, "or"); }
-    | OP_EQ  ID operando operando FIM_LINHA
-        { verificar_operacao_binaria($2, $3, $4, "igual"); }
-    | OP_NEQ ID operando operando FIM_LINHA
-        { verificar_operacao_binaria($2, $3, $4, "diferente"); }
-    | OP_GT  ID operando operando FIM_LINHA
-        { verificar_operacao_binaria($2, $3, $4, "maior"); }
-    | OP_LT  ID operando operando FIM_LINHA
-        { verificar_operacao_binaria($2, $3, $4, "menor"); }
-    | OP_GTE ID operando operando FIM_LINHA
-        { verificar_operacao_binaria($2, $3, $4, "maior ou igual"); }
-    | OP_LTE ID operando operando FIM_LINHA
-        { verificar_operacao_binaria($2, $3, $4, "menor ou igual"); }
-    ;
-
-/* ----------------------------------------------------------
- * OPERACAO UNARIA DE TRES ENDERECOS
- * ---------------------------------------------------------- */
-op_unario
-    : OP_NOT ID operando FIM_LINHA
-    ;
-
-/* ----------------------------------------------------------
- * IF / IF-ELSE
- * ---------------------------------------------------------- */
+/* ══════════════════════════════════════════════════════
+ * IF / IF-ELSE — a nota guia (ID) deve ser bool.
+ * ══════════════════════════════════════════════════════ */
 if_stmt
     : IF BLOCO_INI ID FIM_LINHA stmt_list END_BLOCO
-    | IF BLOCO_INI ID FIM_LINHA stmt_list END_BLOCO ELSE BLOCO_INI stmt_list END_BLOCO
+    {
+        Simbolo *s = buscarSimbolo(tabelaAtual, $3);
+        if (s == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "IF: nota guia '%s' nao declarada", $3);
+            erro_semantico(msg, yylineno);
+        } else if (s->tipo != TIPO_BOOL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "IF: nota guia '%s' deve ser bool, mas e %s",
+                $3, tipoParaString(s->tipo));
+            erro_semantico(msg, yylineno);
+        }
+    }
+
+    | IF BLOCO_INI ID FIM_LINHA stmt_list END_BLOCO
+      ELSE BLOCO_INI stmt_list END_BLOCO
+    {
+        Simbolo *s = buscarSimbolo(tabelaAtual, $3);
+        if (s == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "IF/ELSE: nota guia '%s' nao declarada", $3);
+            erro_semantico(msg, yylineno);
+        } else if (s->tipo != TIPO_BOOL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "IF/ELSE: nota guia '%s' deve ser bool, mas e %s",
+                $3, tipoParaString(s->tipo));
+            erro_semantico(msg, yylineno);
+        }
+    }
     ;
 
-/* ----------------------------------------------------------
- * WHILE
- * ---------------------------------------------------------- */
+/* ══════════════════════════════════════════════════════
+ * WHILE — nota guia deve ser bool.
+ * ══════════════════════════════════════════════════════ */
 while_stmt
     : WHILE BLOCO_INI ID FIM_LINHA stmt_list END_BLOCO
+    {
+        Simbolo *s = buscarSimbolo(tabelaAtual, $3);
+        if (s == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "WHILE: nota guia '%s' nao declarada", $3);
+            erro_semantico(msg, yylineno);
+        } else if (s->tipo != TIPO_BOOL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "WHILE: nota guia '%s' deve ser bool, mas e %s",
+                $3, tipoParaString(s->tipo));
+            erro_semantico(msg, yylineno);
+        }
+    }
     ;
 
-/* ----------------------------------------------------------
- * RETURN / BREAK / CONTINUE
- * ---------------------------------------------------------- */
+/* ══════════════════════════════════════════════════════
+ * RETURN (Am / KW_RETURN)
+ * Verifica: fora de função; tipo retornado ≠ tipo declarado.
+ * ══════════════════════════════════════════════════════ */
 return_stmt
     : KW_RETURN operando FIM_LINHA
+    {
+        if (tipo_retorno_atual == TIPO_NULL && nome_funcao_atual[0] == '\0') {
+            erro_semantico("return (Am) usado fora de uma funcao", yylineno);
+        } else if ($2 != TIPO_NULL && $2 != tipo_retorno_atual) {
+            char msg[400];
+            snprintf(msg, sizeof(msg),
+                "return em '%s': tipo retornado (%s) incompativel com retorno declarado (%s)",
+                nome_funcao_atual, tipoParaString($2), tipoParaString(tipo_retorno_atual));
+            erro_semantico(msg, yylineno);
+        }
+    }
     ;
 
-break_stmt
-    : KW_BREAK FIM_LINHA
+break_stmt    : KW_BREAK    FIM_LINHA ;
+continue_stmt : KW_CONTINUE FIM_LINHA ;
+
+/* ══════════════════════════════════════════════════════
+ * READLIST — C7maj
+ * $2=destino  $3=lista  $4=tipo do índice
+ * ══════════════════════════════════════════════════════ */
+read_list_stmt
+    : READ_LIST ID ID operando FIM_LINHA
+    {
+        Simbolo *dest  = buscarSimbolo(tabelaAtual, $2);
+        Simbolo *lista = buscarSimbolo(tabelaAtual, $3);
+
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "ReadList: destino '%s' nao declarado", $2);
+            erro_semantico(msg, yylineno);
+        }
+        if (lista == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "ReadList: '%s' nao declarado", $3);
+            erro_semantico(msg, yylineno);
+        } else if (lista->tipo != TIPO_LISTA) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "ReadList: '%s' nao e uma lista (e %s)", $3, tipoParaString(lista->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if ($4 != TIPO_INT) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "ReadList: indice deve ser int, mas e %s", tipoParaString($4));
+            erro_semantico(msg, yylineno);
+        }
+    }
     ;
 
-continue_stmt
-    : KW_CONTINUE FIM_LINHA
+/* ══════════════════════════════════════════════════════
+ * WRITELIST — Cm7
+ * $2=lista  $3=tipo do índice  $4=tipo do valor
+ * ══════════════════════════════════════════════════════ */
+write_list_stmt
+    : WRITE_LIST ID operando operando FIM_LINHA
+    {
+        Simbolo *lista = buscarSimbolo(tabelaAtual, $2);
+
+        if (lista == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "WriteList: '%s' nao declarado", $2);
+            erro_semantico(msg, yylineno);
+        } else if (lista->tipo != TIPO_LISTA) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "WriteList: '%s' nao e uma lista (e %s)", $2, tipoParaString(lista->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if ($3 != TIPO_INT) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "WriteList: indice deve ser int, mas e %s", tipoParaString($3));
+            erro_semantico(msg, yylineno);
+        }
+    }
     ;
 
-/* ----------------------------------------------------------
- * CHAMADA DE FUNCAO (Function Call)
- *
- * Sintaxe: id operando1 operando2 ... BC
- * Exemplo: soma 10 20 B C
- * ---------------------------------------------------------- */
+/* ══════════════════════════════════════════════════════
+ * CHAMADA DE FUNÇÃO — ID operando_list FIM_LINHA
+ * (sem token dedicado: o ID inicial é o nome da função chamada)
+ * Verifica: função declarada; nº de argumentos == nº de parâmetros.
+ * ══════════════════════════════════════════════════════ */
 func_call_stmt
-    : ID operando_list FIM_LINHA
+    : ID { contagem_args_atual = 0; } operando_list FIM_LINHA
+    {
+        AssinaturaFuncao *sig = buscar_assinatura($1);
+        if (sig == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "chamada: funcao '%s' nao declarada (declare antes de chamar)", $1);
+            erro_semantico(msg, yylineno);
+        } else if (contagem_args_atual != sig->num_params) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "chamada '%s': esperava %d argumento(s), recebeu %d",
+                $1, sig->num_params, contagem_args_atual);
+            erro_semantico(msg, yylineno);
+        }
+    }
     ;
 
 operando_list
-    : operando_list operando
-    | /* vazio */
+    : operando_list operando { contagem_args_atual++; }
+    | %empty
     ;
 
-/* ----------------------------------------------------------
- * OPERACOES DE LISTA
- * ---------------------------------------------------------- */
-read_list_stmt
-    : READ_LIST ID ID operando FIM_LINHA
+/* ══════════════════════════════════════════════════════
+ * OPERADORES BINÁRIOS (três endereços): OP destino op1 op2 FIM_LINHA
+ * Aritméticos → destino/operandos numéricos (int ou float)
+ * Lógicos     → destino/operandos bool
+ * Igualdade   → destino bool; operandos do mesmo tipo
+ * Ordem       → destino bool; operandos numéricos
+ * ══════════════════════════════════════════════════════ */
+op_binario
+    /* ── SOMA — C/E ── */
+    : OP_ADD ID operando operando FIM_LINHA
+    {
+        Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "soma (C/E): destino '%s' nao declarado", $2);
+            erro_semantico(msg, yylineno);
+        } else if (!tipo_numerico(dest->tipo)) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "soma (C/E): destino '%s' deve ser numerico, mas e %s",
+                $2, tipoParaString(dest->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico($3) && $3 != TIPO_NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "soma (C/E): operando 1 deve ser numerico, mas e %s", tipoParaString($3));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico($4) && $4 != TIPO_NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "soma (C/E): operando 2 deve ser numerico, mas e %s", tipoParaString($4));
+            erro_semantico(msg, yylineno);
+        }
+    }
+
+    /* ── SUBTRAÇÃO — Dm/F# ── */
+    | OP_SUB ID operando operando FIM_LINHA
+    {
+        Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "subtracao (Dm/F#): destino '%s' nao declarado", $2);
+            erro_semantico(msg, yylineno);
+        } else if (!tipo_numerico(dest->tipo)) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "subtracao (Dm/F#): destino '%s' deve ser numerico, mas e %s",
+                $2, tipoParaString(dest->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico($3) && $3 != TIPO_NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "subtracao (Dm/F#): operando 1 deve ser numerico, mas e %s", tipoParaString($3));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico($4) && $4 != TIPO_NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "subtracao (Dm/F#): operando 2 deve ser numerico, mas e %s", tipoParaString($4));
+            erro_semantico(msg, yylineno);
+        }
+    }
+
+    /* ── MULTIPLICAÇÃO — E/G ── */
+    | OP_MUL ID operando operando FIM_LINHA
+    {
+        Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "multiplicacao (E/G): destino '%s' nao declarado", $2);
+            erro_semantico(msg, yylineno);
+        } else if (!tipo_numerico(dest->tipo)) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "multiplicacao (E/G): destino '%s' deve ser numerico, mas e %s",
+                $2, tipoParaString(dest->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico($3) && $3 != TIPO_NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "multiplicacao (E/G): operando 1 deve ser numerico, mas e %s", tipoParaString($3));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico($4) && $4 != TIPO_NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "multiplicacao (E/G): operando 2 deve ser numerico, mas e %s", tipoParaString($4));
+            erro_semantico(msg, yylineno);
+        }
+    }
+
+    /* ── DIVISÃO — F/A ── */
+    | OP_DIV ID operando operando FIM_LINHA
+    {
+        Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "divisao (F/A): destino '%s' nao declarado", $2);
+            erro_semantico(msg, yylineno);
+        } else if (!tipo_numerico(dest->tipo)) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "divisao (F/A): destino '%s' deve ser numerico, mas e %s",
+                $2, tipoParaString(dest->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico($3) && $3 != TIPO_NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "divisao (F/A): operando 1 deve ser numerico, mas e %s", tipoParaString($3));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico($4) && $4 != TIPO_NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "divisao (F/A): operando 2 deve ser numerico, mas e %s", tipoParaString($4));
+            erro_semantico(msg, yylineno);
+        }
+    }
+
+    /* ── AND — G/B ── */
+    | OP_AND ID operando operando FIM_LINHA
+    {
+        Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "and (G/B): destino '%s' nao declarado", $2);
+            erro_semantico(msg, yylineno);
+        } else if (dest->tipo != TIPO_BOOL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "and (G/B): destino '%s' deve ser bool, mas e %s",
+                $2, tipoParaString(dest->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if ($3 != TIPO_BOOL && $3 != TIPO_NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "and (G/B): operando 1 deve ser bool, mas e %s", tipoParaString($3));
+            erro_semantico(msg, yylineno);
+        }
+        if ($4 != TIPO_BOOL && $4 != TIPO_NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "and (G/B): operando 2 deve ser bool, mas e %s", tipoParaString($4));
+            erro_semantico(msg, yylineno);
+        }
+    }
+
+    /* ── OR — Am/C ── */
+    | OP_OR ID operando operando FIM_LINHA
+    {
+        Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "or (Am/C): destino '%s' nao declarado", $2);
+            erro_semantico(msg, yylineno);
+        } else if (dest->tipo != TIPO_BOOL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "or (Am/C): destino '%s' deve ser bool, mas e %s",
+                $2, tipoParaString(dest->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if ($3 != TIPO_BOOL && $3 != TIPO_NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "or (Am/C): operando 1 deve ser bool, mas e %s", tipoParaString($3));
+            erro_semantico(msg, yylineno);
+        }
+        if ($4 != TIPO_BOOL && $4 != TIPO_NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "or (Am/C): operando 2 deve ser bool, mas e %s", tipoParaString($4));
+            erro_semantico(msg, yylineno);
+        }
+    }
+
+    /* ── IGUAL — C7/E ── */
+    | OP_EQ ID operando operando FIM_LINHA
+    {
+        Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "igual (C7/E): destino '%s' nao declarado", $2);
+            erro_semantico(msg, yylineno);
+        } else if (dest->tipo != TIPO_BOOL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "igual (C7/E): destino '%s' deve ser bool, mas e %s",
+                $2, tipoParaString(dest->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipos_comparaveis($3, $4)) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "igual (C7/E): operandos de tipos diferentes (%s vs %s)",
+                tipoParaString($3), tipoParaString($4));
+            erro_semantico(msg, yylineno);
+        }
+    }
+
+    /* ── DIFERENTE — Dm7/F# ── */
+    | OP_NEQ ID operando operando FIM_LINHA
+    {
+        Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "diferente (Dm7/F#): destino '%s' nao declarado", $2);
+            erro_semantico(msg, yylineno);
+        } else if (dest->tipo != TIPO_BOOL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "diferente (Dm7/F#): destino '%s' deve ser bool, mas e %s",
+                $2, tipoParaString(dest->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipos_comparaveis($3, $4)) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "diferente (Dm7/F#): operandos de tipos diferentes (%s vs %s)",
+                tipoParaString($3), tipoParaString($4));
+            erro_semantico(msg, yylineno);
+        }
+    }
+
+    /* ── MAIOR QUE — E7/G ── */
+    | OP_GT ID operando operando FIM_LINHA
+    {
+        Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "maior_que (E7/G): destino '%s' nao declarado", $2);
+            erro_semantico(msg, yylineno);
+        } else if (dest->tipo != TIPO_BOOL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "maior_que (E7/G): destino '%s' deve ser bool, mas e %s",
+                $2, tipoParaString(dest->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico($3)) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "maior_que (E7/G): operando 1 deve ser numerico, mas e %s", tipoParaString($3));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico($4)) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "maior_que (E7/G): operando 2 deve ser numerico, mas e %s", tipoParaString($4));
+            erro_semantico(msg, yylineno);
+        }
+    }
+
+    /* ── MENOR QUE — F7/A ── */
+    | OP_LT ID operando operando FIM_LINHA
+    {
+        Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "menor_que (F7/A): destino '%s' nao declarado", $2);
+            erro_semantico(msg, yylineno);
+        } else if (dest->tipo != TIPO_BOOL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "menor_que (F7/A): destino '%s' deve ser bool, mas e %s",
+                $2, tipoParaString(dest->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico($3)) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "menor_que (F7/A): operando 1 deve ser numerico, mas e %s", tipoParaString($3));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico($4)) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "menor_que (F7/A): operando 2 deve ser numerico, mas e %s", tipoParaString($4));
+            erro_semantico(msg, yylineno);
+        }
+    }
+
+    /* ── MAIOR OU IGUAL — G7/B ── */
+    | OP_GTE ID operando operando FIM_LINHA
+    {
+        Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "maior_igual (G7/B): destino '%s' nao declarado", $2);
+            erro_semantico(msg, yylineno);
+        } else if (dest->tipo != TIPO_BOOL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "maior_igual (G7/B): destino '%s' deve ser bool, mas e %s",
+                $2, tipoParaString(dest->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico($3)) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "maior_igual (G7/B): operando 1 deve ser numerico, mas e %s", tipoParaString($3));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico($4)) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "maior_igual (G7/B): operando 2 deve ser numerico, mas e %s", tipoParaString($4));
+            erro_semantico(msg, yylineno);
+        }
+    }
+
+    /* ── MENOR OU IGUAL — A7/C# ── */
+    | OP_LTE ID operando operando FIM_LINHA
+    {
+        Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "menor_igual (A7/C#): destino '%s' nao declarado", $2);
+            erro_semantico(msg, yylineno);
+        } else if (dest->tipo != TIPO_BOOL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "menor_igual (A7/C#): destino '%s' deve ser bool, mas e %s",
+                $2, tipoParaString(dest->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico($3)) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "menor_igual (A7/C#): operando 1 deve ser numerico, mas e %s", tipoParaString($3));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico($4)) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "menor_igual (A7/C#): operando 2 deve ser numerico, mas e %s", tipoParaString($4));
+            erro_semantico(msg, yylineno);
+        }
+    }
     ;
 
-write_list_stmt
-    : WRITE_LIST ID operando operando FIM_LINHA
+/* ══════════════════════════════════════════════════════
+ * NOT — Bm/D — destino e operando devem ser bool.
+ * ══════════════════════════════════════════════════════ */
+op_unario
+    : OP_NOT ID operando FIM_LINHA
+    {
+        Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "not (Bm/D): destino '%s' nao declarado", $2);
+            erro_semantico(msg, yylineno);
+        } else if (dest->tipo != TIPO_BOOL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "not (Bm/D): destino '%s' deve ser bool, mas e %s",
+                $2, tipoParaString(dest->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if ($3 != TIPO_BOOL && $3 != TIPO_NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "not (Bm/D): operando deve ser bool, mas e %s", tipoParaString($3));
+            erro_semantico(msg, yylineno);
+        }
+    }
+    ;
+
+/* ══════════════════════════════════════════════════════
+ * OPERANDO — propaga Tipo para cima na árvore sintática.
+ * ══════════════════════════════════════════════════════ */
+operando
+    : ID
+    {
+        Simbolo *s = buscarSimbolo(tabelaAtual, $1);
+        if (s == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "variavel '%s' usada sem ter sido declarada", $1);
+            erro_semantico(msg, yylineno);
+            $$ = TIPO_NULL;
+        } else {
+            $$ = s->tipo;
+        }
+    }
+    | LIT_INT    { $$ = TIPO_INT;   }
+    | LIT_FLOAT  { $$ = TIPO_FLOAT; }
+    | LIT_CHAR   { $$ = TIPO_CHAR;  }
+    | LIT_STRING { $$ = TIPO_CHAR;  } /* sem tipo string dedicado na tabela */
+    | LIT_BOOL   { $$ = TIPO_BOOL;  }
+    | ACORDE_LIVRE { $$ = TIPO_NULL; } /* acorde livre: opaco/wildcard */
     ;
 
 %%
-
-static Tipo tipo_de_texto(const char *tipo)
-{
-    if (strcmp(tipo, "int") == 0 || strcmp(tipo, "C/G") == 0) return TIPO_INT;
-    if (strcmp(tipo, "float") == 0 || strcmp(tipo, "Am/E") == 0) return TIPO_FLOAT;
-    if (strcmp(tipo, "bool") == 0 || strcmp(tipo, "Em/B") == 0) return TIPO_BOOL;
-    if (strcmp(tipo, "char") == 0 || strcmp(tipo, "F/C") == 0) return TIPO_CHAR;
-    if (strcmp(tipo, "null") == 0 || strcmp(tipo, "G/D") == 0) return TIPO_NULL;
-    if (strcmp(tipo, "lista") == 0 || strcmp(tipo, "C7") == 0) return TIPO_LISTA;
-    return TIPO_NULL;
-}
-
-static Categoria categoria_de_texto(const char *categoria)
-{
-    if (strcmp(categoria, "funcao") == 0) return CAT_FUNCAO;
-    if (strcmp(categoria, "parametro") == 0) return CAT_PARAMETRO;
-    return CAT_VARIAVEL;
-}
-
-static void inserir_simbolo(const char *nome, const char *tipo, const char *categoria, int linha)
-{
-    if (tabelaAtual == NULL)
-    {
-        return;
-    }
-
-    inserirSimbolo(
-        tabelaAtual,
-        criarSimbolo(
-            (char *)nome,
-            tipo_de_texto(tipo),
-            categoria_de_texto(categoria),
-            linha
-        )
-    );
-}
-
-void yyerror(const char *msg)
-{
-    (void)msg;
-    printf("Erro próximo a linha %d - Programa sintaticamente incorreto\n", yylineno);
-}
-
-// Função auxiliar para ignorar literais na hora de buscar na Tabela
-static int is_literal(const char *str) {
-    if (str[0] >= '0' && str[0] <= '9') return 1;
-    if (strcmp(str, "0") == 0 || strcmp(str, "1") == 0) return 1; // bools do lexer
-    return 0;
-}
-
-static void verificar_operacao_binaria(const char *dest_name, const char *op1_name, const char *op2_name, const char *operacao) 
-{
-    if (tabelaAtual == NULL) return;
-
-    // 1. Verifica Existência do Destino
-    Simbolo *dest = buscarSimbolo(tabelaAtual, (char*)dest_name);
-    if (dest == NULL) {
-        printf("Erro Semantico (Linha %d): Variavel de destino '%s' nao declarada.\n", yylineno, dest_name);
-        return; 
-    }
-
-    // 2. Verifica Existência do Operando 1 (se não for um número literal)
-    Simbolo *s_op1 = NULL;
-    if (!is_literal(op1_name)) {
-        s_op1 = buscarSimbolo(tabelaAtual, (char*)op1_name);
-        if (s_op1 == NULL) {
-            printf("Erro Semantico (Linha %d): Variavel '%s' nao declarada antes do uso.\n", yylineno, op1_name);
-        }
-    }
-
-    // 3. Verifica Existência do Operando 2 (se não for um número literal)
-    Simbolo *s_op2 = NULL;
-    if (!is_literal(op2_name)) {
-        s_op2 = buscarSimbolo(tabelaAtual, (char*)op2_name);
-        if (s_op2 == NULL) {
-            printf("Erro Semantico (Linha %d): Variavel '%s' nao declarada antes do uso.\n", yylineno, op2_name);
-        }
-    }
-
-    // =========================================================
-    // 4. VERIFICAÇÃO DE TIPOS
-    // =========================================================
-    
-    // A. OPERAÇÕES ARITMÉTICAS
-    if (strcmp(operacao, "soma") == 0 || strcmp(operacao, "subtracao") == 0 || 
-        strcmp(operacao, "multiplicacao") == 0 || strcmp(operacao, "divisao") == 0) 
-    {
-        if (dest->tipo != TIPO_INT && dest->tipo != TIPO_FLOAT) {
-            printf("Erro Semantico (Linha %d): Operacao de '%s' exige destino numerico (Encontrado: '%s').\n", 
-                   yylineno, operacao, dest_name);
-        }
-        
-        if (s_op1 != NULL && s_op1->tipo != TIPO_INT && s_op1->tipo != TIPO_FLOAT) {
-            printf("Erro Semantico (Linha %d): Operando '%s' invalido para conta matematica.\n", yylineno, op1_name);
-        }
-        if (s_op2 != NULL && s_op2->tipo != TIPO_INT && s_op2->tipo != TIPO_FLOAT) {
-            printf("Erro Semantico (Linha %d): Operando '%s' invalido para conta matematica.\n", yylineno, op2_name);
-        }
-    }
-    
-    // B. OPERAÇÕES LÓGICAS (AND, OR)
-    else if (strcmp(operacao, "and") == 0 || strcmp(operacao, "or") == 0) 
-    {
-        if (dest->tipo != TIPO_BOOL) {
-            printf("Erro Semantico (Linha %d): Operacao logica '%s' exige que o destino seja Booleano.\n", yylineno, operacao);
-        }
-        
-        if (s_op1 != NULL && s_op1->tipo != TIPO_BOOL) {
-            printf("Erro Semantico (Linha %d): Operando '%s' deve ser Booleano para a operacao '%s'.\n", yylineno, op1_name, operacao);
-        }
-        if (s_op2 != NULL && s_op2->tipo != TIPO_BOOL) {
-            printf("Erro Semantico (Linha %d): Operando '%s' deve ser Booleano para a operacao '%s'.\n", yylineno, op2_name, operacao);
-        }
-    }
-
-    // C. OPERAÇÕES RELACIONAIS (Maior, Menor, Igual, Diferente, etc.)
-    else if (strcmp(operacao, "igual") == 0 || strcmp(operacao, "diferente") == 0 || 
-             strcmp(operacao, "maior") == 0 || strcmp(operacao, "menor") == 0 || 
-             strcmp(operacao, "maior ou igual") == 0 || strcmp(operacao, "menor ou igual") == 0) 
-    {
-        // O destino obrigatoriamente precisa ser Bool para guardar o Verdadeiro ou Falso do teste
-        if (dest->tipo != TIPO_BOOL) {
-            printf("Erro Semantico (Linha %d): Operacao relacional '%s' exige destino Booleano (variavel '%s' nao e Bool).\n", 
-                   yylineno, operacao, dest_name);
-        }
-
-        // Operandos de grandeza (>, <, >=, <=) normalmente exigem valores numéricos para comparação
-        if (strcmp(operacao, "igual") != 0 && strcmp(operacao, "diferente") != 0) {
-            if (s_op1 != NULL && s_op1->tipo != TIPO_INT && s_op1->tipo != TIPO_FLOAT) {
-                printf("Erro Semantico (Linha %d): Operando '%s' deve ser numerico para a comparacao '%s'.\n", yylineno, op1_name, operacao);
-            }
-            if (s_op2 != NULL && s_op2->tipo != TIPO_INT && s_op2->tipo != TIPO_FLOAT) {
-                printf("Erro Semantico (Linha %d): Operando '%s' deve ser numerico para a comparacao '%s'.\n", yylineno, op2_name, operacao);
-            }
-        }
-    }
-}
