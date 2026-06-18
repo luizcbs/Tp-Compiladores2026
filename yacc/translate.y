@@ -1,10 +1,9 @@
-/* translate.y — Soundy Script — TP3: Análise Semântica
- * Tópico 3: Gabriel | Semântica: Kayo, Rodrigo
- * yyerror() e main() ficam no Tópico 4; tabela_simbolos no Tópico 2.
- *
- * Tokens e %union conferidos contra lex/soundy.l real do grupo.
- * Funções de tabela (buscarSimbolo, criarSimbolo, tipoParaString)
- * usam a API real de TabelaSimbolo.h — não reimplementadas aqui.
+/* 
+ * Tokens NOVOS que o lexer (Topico 4) ainda precisa adicionar:
+ *   CALL       ("A/C#" — distinto de "A7/C#" que e OP_LTE)
+ *   NULL_LIT   ("G/D" — agora literal, nao mais parte de TIPO)
+ *   '['  ']'   (delimitadores de tamanho do vetor)
+ *   TIPO não deve mais reconhecer "G/D" nem "F/C" (null e char saem do tipo)
  */
 
 %code requires {
@@ -22,12 +21,19 @@ extern TabelaSimbolo *tabelaAtual;
 int  yylex(void);
 void yyerror(const char *msg);
 
-/* ── Assinaturas de função (nº de parâmetros) ──
- * O retorno da função já fica em Simbolo.tipo (inserido como "funcao");
- * só o nº de parâmetros não existe na tabela do Tópico 2. */
-typedef struct { char nome[50]; int num_params; } AssinaturaFuncao;
+/* ── Assinaturas de função (retorno + nº de parâmetros) ──
+ * Simbolo.tipo ja guarda o retorno da funcao (inserido como "funcao"),
+ * mas o numero de parametros nao existe na tabela do Topico 2. */
+typedef struct { char nome[50]; Tipo retorno; int num_params; } AssinaturaFuncao;
 static AssinaturaFuncao assinaturas[100];
 static int              num_assinaturas = 0;
+
+/* ── Tamanhos de vetor — necessario para bounds checking.
+ * Nao existe campo equivalente em Simbolo; mantido aqui ate o
+ * Topico 2 decidir se adiciona um campo "tamanho" na struct. */
+typedef struct { char nome[50]; int tamanho; } InfoVetor;
+static InfoVetor vetores[100];
+static int       num_vetores = 0;
 
 /* ── Contexto da função em declaração ── */
 static Tipo tipo_retorno_atual    = TIPO_NULL;
@@ -40,16 +46,15 @@ static void erro_semantico(const char *msg, int linha)
     fprintf(stderr, "Erro semantico na linha %d: %s\n", linha, msg);
 }
 
-/* Acorde/texto → Tipo (espelha o que soundy.l reconhece como TIPO) */
+/* Acorde/texto → Tipo. G/D e F/C NAO aparecem mais aqui: null e
+ * literal (NULL_LIT) e char foi removido da linguagem no TP3. */
 static Tipo tipo_de_texto(const char *s)
 {
     if (strcmp(s, "C/G")  == 0) return TIPO_INT;
     if (strcmp(s, "Am/E") == 0) return TIPO_FLOAT;
     if (strcmp(s, "Em/B") == 0) return TIPO_BOOL;
-    if (strcmp(s, "F/C")  == 0) return TIPO_CHAR;
-    if (strcmp(s, "G/D")  == 0) return TIPO_NULL;
     if (strcmp(s, "C7")   == 0) return TIPO_LISTA;
-    return TIPO_NULL;
+    return TIPO_NULL; /* nao deveria ocorrer com o lexer atualizado */
 }
 
 static Categoria categoria_de_texto(const char *s)
@@ -59,7 +64,6 @@ static Categoria categoria_de_texto(const char *s)
     return CAT_VARIAVEL;
 }
 
-/* Monta Simbolo via criarSimbolo() (Tópico 2) e insere na tabela atual. */
 static void inserir_simbolo(char *nome, char *tipo_str, char *cat_str, int linha)
 {
     Simbolo s = criarSimbolo(nome, tipo_de_texto(tipo_str),
@@ -67,10 +71,11 @@ static void inserir_simbolo(char *nome, char *tipo_str, char *cat_str, int linha
     inserirSimbolo(tabelaAtual, s);
 }
 
-static void registrar_assinatura(const char *nome, int params)
+static void registrar_assinatura(const char *nome, Tipo retorno, int params)
 {
     if (num_assinaturas >= 100) return;
     strncpy(assinaturas[num_assinaturas].nome, nome, 49);
+    assinaturas[num_assinaturas].retorno    = retorno;
     assinaturas[num_assinaturas].num_params = params;
     num_assinaturas++;
 }
@@ -84,13 +89,29 @@ static AssinaturaFuncao *buscar_assinatura(const char *nome)
     return NULL;
 }
 
-/* Retorna 1 se o tipo é numérico (int ou float). */
+static void registrar_vetor(const char *nome, int tamanho)
+{
+    if (num_vetores >= 100) return;
+    strncpy(vetores[num_vetores].nome, nome, 49);
+    vetores[num_vetores].tamanho = tamanho;
+    num_vetores++;
+}
+
+/* Retorna -1 se o vetor nao foi encontrado no registro local. */
+static int buscar_tamanho_vetor(const char *nome)
+{
+    int i;
+    for (i = 0; i < num_vetores; i++)
+        if (strcmp(vetores[i].nome, nome) == 0)
+            return vetores[i].tamanho;
+    return -1;
+}
+
 static int tipo_numerico(Tipo t)
 {
     return t == TIPO_INT || t == TIPO_FLOAT;
 }
 
-/* Retorna 1 se os dois tipos podem ser comparados entre si. */
 static int tipos_comparaveis(Tipo a, Tipo b)
 {
     if (a == TIPO_NULL || b == TIPO_NULL) return 1;
@@ -99,16 +120,15 @@ static int tipos_comparaveis(Tipo a, Tipo b)
 %}
 
 %union {
-    int    ival;      /* LIT_INT, LIT_BOOL                 */
-    double fval;      /* LIT_FLOAT                          */
-    char   sval[256]; /* ID, TIPO, LIT_CHAR/STRING, ACORDE_LIVRE */
-    Tipo   tval;      /* propagação de tipo (TP3)           */
+    int    ival;
+    double fval;
+    char   sval[256];
+    Tipo   tval;
 }
 
-/* ── Tokens — nomes idênticos aos retornados por lex/soundy.l ── */
 %token FIM_LINHA
 %token <sval> TIPO
-%token VAR FUNC
+%token VAR FUNC CALL
 %token IF ELSE WHILE
 %token KW_RETURN KW_BREAK KW_CONTINUE
 %token BLOCO_INI END_BLOCO
@@ -120,18 +140,12 @@ static int tipos_comparaveis(Tipo a, Tipo b)
 
 %token <ival> LIT_INT
 %token <fval> LIT_FLOAT
-%token <sval> LIT_CHAR
-%token <sval> LIT_STRING
 %token <ival> LIT_BOOL
 %token <sval> ID
 %token <sval> ACORDE_LIVRE
+%token NULL_LIT
 
 %type <tval> operando
-
-/* Resolve a ambiguidade: TIPO VAR ID END_BLOCO termina aqui,
- * ou continua para "operando FIM_LINHA"? Ver var_decl. */
-%nonassoc DECL_SEM_INICIALIZACAO
-%nonassoc ID LIT_INT LIT_FLOAT LIT_CHAR LIT_STRING LIT_BOOL ACORDE_LIVRE
 
 %%
 
@@ -140,13 +154,12 @@ decl_list : decl_list decl | decl ;
 decl      : func_decl | stmt ;
 
 /* ══════════════════════════════════════════════════════
- * DECLARAÇÃO DE VARIÁVEL
- *   TIPO VAR ID END_BLOCO                    — sem valor inicial
- *   TIPO VAR ID END_BLOCO operando FIM_LINHA — com valor inicial
- * Verifica: tipo do valor inicial compatível com tipo declarado.
+ * DECLARAÇÃO DE VARIÁVEL (doc 4.4 — agora sempre fecha com FIM_LINHA)
+ *   TIPO VAR ID END_BLOCO FIM_LINHA              — sem valor inicial
+ *   TIPO VAR ID END_BLOCO operando FIM_LINHA      — com valor inicial
  * ══════════════════════════════════════════════════════ */
 var_decl
-    : TIPO VAR ID END_BLOCO %prec DECL_SEM_INICIALIZACAO
+    : TIPO VAR ID END_BLOCO FIM_LINHA
     {
         inserir_simbolo($3, $1, "variavel", yylineno);
     }
@@ -157,37 +170,58 @@ var_decl
         if ($5 != TIPO_NULL && $5 != t_decl) {
             char msg[400];
             snprintf(msg, sizeof(msg),
-                "variavel '%s': valor inicial (%s) incompativel com tipo declarado (%s)",
-                $3, tipoParaString($5), tipoParaString(t_decl));
+                "variavel '%s': valor inicial incompativel com tipo declarado", $3);
             erro_semantico(msg, yylineno);
         }
         inserir_simbolo($3, $1, "variavel", yylineno);
     }
+
+    /* ══════════════════════════════════════════════════
+     * DECLARAÇÃO DE VETOR (doc 1.2 / 4.5 — tamanho obrigatorio)
+     *   TIPO(lista) TIPO(elemento) ID END_BLOCO '[' LIT_INT ']' FIM_LINHA
+     * Ex.: C7 C/G notas Cm [8] B C
+     * ══════════════════════════════════════════════════ */
+    | TIPO TIPO ID END_BLOCO '[' LIT_INT ']' FIM_LINHA
+    {
+        if (strcmp($1, "C7") != 0) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "vetor '%s': tipo composto esperado e C7 (lista)", $3);
+            erro_semantico(msg, yylineno);
+        }
+        if ($6 <= 0) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "vetor '%s': tamanho deve ser > 0 (recebeu %d)", $3, $6);
+            erro_semantico(msg, yylineno);
+        }
+        inserir_simbolo($3, $1, "variavel", yylineno);
+        registrar_vetor($3, $6);
+    }
     ;
 
 /* ══════════════════════════════════════════════════════
- * DECLARAÇÃO DE FUNÇÃO
- * func_header reduz logo após "TIPO FUNC ID": insere a função no
- * escopo pai e já abre o escopo filho (parâmetros entram nele).
+ * DECLARAÇÃO DE FUNÇÃO (doc 8.2 — END_BLOCO logo apos o ID)
+ * func_header reduz apos "TIPO FUNC ID END_BLOCO": insere a funcao
+ * no escopo pai e abre o escopo filho antes dos parametros.
  * ══════════════════════════════════════════════════════ */
 func_decl
     : func_header param_list BLOCO_INI stmt_list END_BLOCO
     {
-        registrar_assinatura(nome_funcao_atual, contagem_params_atual);
+        registrar_assinatura(nome_funcao_atual, tipo_retorno_atual,
+                             contagem_params_atual);
         sairTabelaSimbolo(&tabelaAtual);
     }
     | func_header BLOCO_INI stmt_list END_BLOCO
     {
-        registrar_assinatura(nome_funcao_atual, 0);
+        registrar_assinatura(nome_funcao_atual, tipo_retorno_atual, 0);
         sairTabelaSimbolo(&tabelaAtual);
     }
     ;
 
 func_header
-    : TIPO FUNC ID
+    : TIPO FUNC ID END_BLOCO
     {
         inserir_simbolo($3, $1, "funcao", yylineno);
-        tipo_retorno_atual = tipo_de_texto($1);
+        tipo_retorno_atual    = tipo_de_texto($1);
         strncpy(nome_funcao_atual, $3, 49);
         contagem_params_atual = 0;
 
@@ -217,7 +251,7 @@ stmt
     ;
 
 /* ══════════════════════════════════════════════════════
- * IF / IF-ELSE — a nota guia (ID) deve ser bool.
+ * IF / IF-ELSE — nota guia deve ser bool (doc 7.1, 7.2)
  * ══════════════════════════════════════════════════════ */
 if_stmt
     : IF BLOCO_INI ID FIM_LINHA stmt_list END_BLOCO
@@ -253,7 +287,7 @@ if_stmt
     ;
 
 /* ══════════════════════════════════════════════════════
- * WHILE — nota guia deve ser bool.
+ * WHILE — nota guia deve ser bool (doc 7.3)
  * ══════════════════════════════════════════════════════ */
 while_stmt
     : WHILE BLOCO_INI ID FIM_LINHA stmt_list END_BLOCO
@@ -273,13 +307,12 @@ while_stmt
     ;
 
 /* ══════════════════════════════════════════════════════
- * RETURN (Am / KW_RETURN)
- * Verifica: fora de função; tipo retornado ≠ tipo declarado.
+ * RETURN (Am / KW_RETURN) — tipo retornado == tipo da funcao
  * ══════════════════════════════════════════════════════ */
 return_stmt
     : KW_RETURN operando FIM_LINHA
     {
-        if (tipo_retorno_atual == TIPO_NULL && nome_funcao_atual[0] == '\0') {
+        if (nome_funcao_atual[0] == '\0') {
             erro_semantico("return (Am) usado fora de uma funcao", yylineno);
         } else if ($2 != TIPO_NULL && $2 != tipo_retorno_atual) {
             char msg[400];
@@ -295,7 +328,7 @@ break_stmt    : KW_BREAK    FIM_LINHA ;
 continue_stmt : KW_CONTINUE FIM_LINHA ;
 
 /* ══════════════════════════════════════════════════════
- * READLIST — C7maj
+ * READLIST — C7maj — bounds checking agora possivel (doc 4.7)
  * $2=destino  $3=lista  $4=tipo do índice
  * ══════════════════════════════════════════════════════ */
 read_list_stmt
@@ -353,23 +386,37 @@ write_list_stmt
     ;
 
 /* ══════════════════════════════════════════════════════
- * CHAMADA DE FUNÇÃO — ID operando_list FIM_LINHA
- * (sem token dedicado: o ID inicial é o nome da função chamada)
- * Verifica: função declarada; nº de argumentos == nº de parâmetros.
+ * CALL — A/C# (doc 8.1) — agora COM destino e checagem de retorno
+ *   CALL var_destino nome_func [argumentos] FIM_LINHA
  * ══════════════════════════════════════════════════════ */
 func_call_stmt
-    : ID { contagem_args_atual = 0; } operando_list FIM_LINHA
+    : CALL ID ID { contagem_args_atual = 0; } operando_list FIM_LINHA
     {
-        AssinaturaFuncao *sig = buscar_assinatura($1);
+        Simbolo          *dest = buscarSimbolo(tabelaAtual, $2);
+        AssinaturaFuncao *sig  = buscar_assinatura($3);
+
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "CALL: destino '%s' nao declarado", $2);
+            erro_semantico(msg, yylineno);
+        }
         if (sig == NULL) {
             char msg[400]; snprintf(msg, sizeof(msg),
-                "chamada: funcao '%s' nao declarada (declare antes de chamar)", $1);
+                "CALL: funcao '%s' nao declarada (declare antes de chamar)", $3);
             erro_semantico(msg, yylineno);
-        } else if (contagem_args_atual != sig->num_params) {
-            char msg[400]; snprintf(msg, sizeof(msg),
-                "chamada '%s': esperava %d argumento(s), recebeu %d",
-                $1, sig->num_params, contagem_args_atual);
-            erro_semantico(msg, yylineno);
+        } else {
+            if (contagem_args_atual != sig->num_params) {
+                char msg[400]; snprintf(msg, sizeof(msg),
+                    "CALL '%s': esperava %d argumento(s), recebeu %d",
+                    $3, sig->num_params, contagem_args_atual);
+                erro_semantico(msg, yylineno);
+            }
+            if (dest != NULL && dest->tipo != sig->retorno) {
+                char msg[400]; snprintf(msg, sizeof(msg),
+                    "CALL '%s': retorno (%s) incompativel com destino '%s' (%s)",
+                    $3, tipoParaString(sig->retorno), $2, tipoParaString(dest->tipo));
+                erro_semantico(msg, yylineno);
+            }
         }
     }
     ;
@@ -381,35 +428,39 @@ operando_list
 
 /* ══════════════════════════════════════════════════════
  * OPERADORES BINÁRIOS (três endereços): OP destino op1 op2 FIM_LINHA
- * Aritméticos → destino/operandos numéricos (int ou float)
- * Lógicos     → destino/operandos bool
- * Igualdade   → destino bool; operandos do mesmo tipo
- * Ordem       → destino bool; operandos numéricos
  * ══════════════════════════════════════════════════════ */
 op_binario
-    /* ── SOMA — C/E ── */
+    /* ── SOMA — C/E ──
+     * Excecao documentada (doc 4.8): permite destino lista quando um
+     * dos operandos e o literal null (idiom de atribuicao "0 + null"). */
     : OP_ADD ID operando operando FIM_LINHA
     {
         Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
+        int eh_atribuicao_null_em_lista =
+            dest != NULL && dest->tipo == TIPO_LISTA &&
+            ($3 == TIPO_NULL || $4 == TIPO_NULL);
+
         if (dest == NULL) {
             char msg[400]; snprintf(msg, sizeof(msg),
                 "soma (C/E): destino '%s' nao declarado", $2);
             erro_semantico(msg, yylineno);
-        } else if (!tipo_numerico(dest->tipo)) {
+        } else if (!tipo_numerico(dest->tipo) && !eh_atribuicao_null_em_lista) {
             char msg[400]; snprintf(msg, sizeof(msg),
                 "soma (C/E): destino '%s' deve ser numerico, mas e %s",
                 $2, tipoParaString(dest->tipo));
             erro_semantico(msg, yylineno);
         }
-        if (!tipo_numerico($3) && $3 != TIPO_NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
-                "soma (C/E): operando 1 deve ser numerico, mas e %s", tipoParaString($3));
-            erro_semantico(msg, yylineno);
-        }
-        if (!tipo_numerico($4) && $4 != TIPO_NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
-                "soma (C/E): operando 2 deve ser numerico, mas e %s", tipoParaString($4));
-            erro_semantico(msg, yylineno);
+        if (!eh_atribuicao_null_em_lista) {
+            if (!tipo_numerico($3) && $3 != TIPO_NULL) {
+                char msg[400]; snprintf(msg, sizeof(msg),
+                    "soma (C/E): operando 1 deve ser numerico, mas e %s", tipoParaString($3));
+                erro_semantico(msg, yylineno);
+            }
+            if (!tipo_numerico($4) && $4 != TIPO_NULL) {
+                char msg[400]; snprintf(msg, sizeof(msg),
+                    "soma (C/E): operando 2 deve ser numerico, mas e %s", tipoParaString($4));
+                erro_semantico(msg, yylineno);
+            }
         }
     }
 
@@ -693,7 +744,7 @@ op_binario
     ;
 
 /* ══════════════════════════════════════════════════════
- * NOT — Bm/D — destino e operando devem ser bool.
+ * NOT — Bm/D — destino e operando devem ser bool
  * ══════════════════════════════════════════════════════ */
 op_unario
     : OP_NOT ID operando FIM_LINHA
@@ -718,7 +769,8 @@ op_unario
     ;
 
 /* ══════════════════════════════════════════════════════
- * OPERANDO — propaga Tipo para cima na árvore sintática.
+ * OPERANDO (doc secao 10, ajustado ao TP3: sem char/string,
+ * com null como literal)
  * ══════════════════════════════════════════════════════ */
 operando
     : ID
@@ -733,12 +785,11 @@ operando
             $$ = s->tipo;
         }
     }
-    | LIT_INT    { $$ = TIPO_INT;   }
-    | LIT_FLOAT  { $$ = TIPO_FLOAT; }
-    | LIT_CHAR   { $$ = TIPO_CHAR;  }
-    | LIT_STRING { $$ = TIPO_CHAR;  } /* sem tipo string dedicado na tabela */
-    | LIT_BOOL   { $$ = TIPO_BOOL;  }
-    | ACORDE_LIVRE { $$ = TIPO_NULL; } /* acorde livre: opaco/wildcard */
+    | LIT_INT      { $$ = TIPO_INT;   }
+    | LIT_FLOAT    { $$ = TIPO_FLOAT; }
+    | LIT_BOOL     { $$ = TIPO_BOOL;  }
+    | NULL_LIT     { $$ = TIPO_NULL;  }
+    | ACORDE_LIVRE { $$ = TIPO_NULL;  } /* opaco/wildcard */
     ;
 
 %%
