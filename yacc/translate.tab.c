@@ -67,51 +67,116 @@
 
 
 /* First part of user prologue.  */
-#line 1 "yacc/translate.y"
-
-/*
- * Soundy Script -- Analisador Sintatico (Trabalho Pratico 2)
- * Topico 3: Gramatica e Analisador Sintatico
- * Este arquivo concentra a gramatica e as acoes semanticas do parser.
- * A interface de execucao do compilador fica em main.c.
- *
- * NOTACAO DE TRES ENDERECOS (Secao 4 da especificacao):
- * OP dest src1 src2 B C  →  dest = src1 OP src2
- *
- * ATRIBUICAO DE VALORES (Estrategia Assembly/RISC):
- * C/E dest 0 src B C     →  dest = 0 + src (Atribuicao direta)
- *
- * ORDEM DA DECLARACAO DE VARIAVEL (Secao 6):
- * TIPO Dm/A id Cm           →  sem valor inicial
- * TIPO Dm/A id Cm val B C   →  com valor inicial
- *
- * CONDICIONAL/REPETICAO (Secao 5):
- * A condicao e a primeira linha DENTRO do bloco (nota guia):
- * F C
- * cond B C     ← nota guia
- * comandos
- * Cm
- */
+#line 13 "yacc/translate.y"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "TabelaSimbolo.h"
 
-extern int yylineno;
+extern int  yylineno;
+extern TabelaSimbolo *tabelaAtual;
 int  yylex(void);
 void yyerror(const char *msg);
-static void inserir_simbolo(const char *nome, const char *tipo, const char *categoria, int linha);
-static Tipo tipo_de_texto(const char *tipo);
-static Categoria categoria_de_texto(const char *categoria);
 
-extern TabelaSimbolo *global;
-extern TabelaSimbolo *tabelaAtual;
+/* ── Assinaturas de função (retorno + nº de parâmetros) ──
+ * Simbolo.tipo ja guarda o retorno da funcao (inserido como "funcao"),
+ * mas o numero de parametros nao existe na tabela do Topico 2. */
+typedef struct { char nome[50]; Tipo retorno; int num_params; } AssinaturaFuncao;
+static AssinaturaFuncao assinaturas[100];
+static int              num_assinaturas = 0;
 
-static void verificar_operacao_binaria(const char *dest_name, const char *op1_name, const char *op2_name, const char *operacao);
-static int is_literal(const char *str);
+/* ── Tamanhos de vetor — necessario para bounds checking.
+ * Nao existe campo equivalente em Simbolo; mantido aqui ate o
+ * Topico 2 decidir se adiciona um campo "tamanho" na struct. */
+typedef struct { char nome[50]; int tamanho; } InfoVetor;
+static InfoVetor vetores[100];
+static int       num_vetores = 0;
 
-#line 115 "yacc/translate.tab.c"
+/* ── Contexto da função em declaração ── */
+static Tipo tipo_retorno_atual    = TIPO_NULL;
+static char nome_funcao_atual[50] = "";
+static int  contagem_params_atual = 0;
+static int  contagem_args_atual   = 0;
+
+static void erro_semantico(const char *msg, int linha)
+{
+    fprintf(stderr, "Erro semantico na linha %d: %s\n", linha, msg);
+}
+
+/* Acorde/texto → Tipo. G/D e F/C NAO aparecem mais aqui: null e
+ * literal (NULL_LIT) e char foi removido da linguagem no TP3. */
+static Tipo tipo_de_texto(const char *s)
+{
+    if (strcmp(s, "C/G")  == 0) return TIPO_INT;
+    if (strcmp(s, "Am/E") == 0) return TIPO_FLOAT;
+    if (strcmp(s, "Em/B") == 0) return TIPO_BOOL;
+    if (strcmp(s, "C7")   == 0) return TIPO_LISTA;
+    return TIPO_NULL; /* nao deveria ocorrer com o lexer atualizado */
+}
+
+static Categoria categoria_de_texto(const char *s)
+{
+    if (strcmp(s, "funcao")    == 0) return CAT_FUNCAO;
+    if (strcmp(s, "parametro") == 0) return CAT_PARAMETRO;
+    return CAT_VARIAVEL;
+}
+
+static void inserir_simbolo(char *nome, char *tipo_str, char *cat_str, int linha)
+{
+    Simbolo s = criarSimbolo(nome, tipo_de_texto(tipo_str),
+                              categoria_de_texto(cat_str), linha);
+    inserirSimbolo(tabelaAtual, s);
+}
+
+static void registrar_assinatura(const char *nome, Tipo retorno, int params)
+{
+    if (num_assinaturas >= 100) return;
+    strncpy(assinaturas[num_assinaturas].nome, nome, 49);
+    assinaturas[num_assinaturas].retorno    = retorno;
+    assinaturas[num_assinaturas].num_params = params;
+    num_assinaturas++;
+}
+
+static AssinaturaFuncao *buscar_assinatura(const char *nome)
+{
+    int i;
+    for (i = 0; i < num_assinaturas; i++)
+        if (strcmp(assinaturas[i].nome, nome) == 0)
+            return &assinaturas[i];
+    return NULL;
+}
+
+static void registrar_vetor(const char *nome, int tamanho)
+{
+    if (num_vetores >= 100) return;
+    strncpy(vetores[num_vetores].nome, nome, 49);
+    vetores[num_vetores].tamanho = tamanho;
+    num_vetores++;
+}
+
+/* Retorna -1 se o vetor nao foi encontrado no registro local. */
+static int buscar_tamanho_vetor(const char *nome)
+{
+    int i;
+    for (i = 0; i < num_vetores; i++)
+        if (strcmp(vetores[i].nome, nome) == 0)
+            return vetores[i].tamanho;
+    return -1;
+}
+
+static int tipo_numerico(Tipo t)
+{
+    return t == TIPO_INT || t == TIPO_FLOAT;
+}
+
+static int tipos_comparaveis(Tipo a, Tipo b)
+{
+    if (a == TIPO_NULL || b == TIPO_NULL) return 1;
+    return a == b;
+}
+
+#line 180 "yacc/translate.tab.c"
 
 # ifndef YY_CAST
 #  ifdef __cplusplus
@@ -146,59 +211,62 @@ enum yysymbol_kind_t
   YYSYMBOL_TIPO = 4,                       /* TIPO  */
   YYSYMBOL_VAR = 5,                        /* VAR  */
   YYSYMBOL_FUNC = 6,                       /* FUNC  */
-  YYSYMBOL_IF = 7,                         /* IF  */
-  YYSYMBOL_ELSE = 8,                       /* ELSE  */
-  YYSYMBOL_WHILE = 9,                      /* WHILE  */
-  YYSYMBOL_KW_RETURN = 10,                 /* KW_RETURN  */
-  YYSYMBOL_KW_BREAK = 11,                  /* KW_BREAK  */
-  YYSYMBOL_KW_CONTINUE = 12,               /* KW_CONTINUE  */
-  YYSYMBOL_BLOCO_INI = 13,                 /* BLOCO_INI  */
-  YYSYMBOL_END_BLOCO = 14,                 /* END_BLOCO  */
-  YYSYMBOL_READ_LIST = 15,                 /* READ_LIST  */
-  YYSYMBOL_WRITE_LIST = 16,                /* WRITE_LIST  */
-  YYSYMBOL_OP_ADD = 17,                    /* OP_ADD  */
-  YYSYMBOL_OP_SUB = 18,                    /* OP_SUB  */
-  YYSYMBOL_OP_MUL = 19,                    /* OP_MUL  */
-  YYSYMBOL_OP_DIV = 20,                    /* OP_DIV  */
-  YYSYMBOL_OP_AND = 21,                    /* OP_AND  */
-  YYSYMBOL_OP_OR = 22,                     /* OP_OR  */
-  YYSYMBOL_OP_NOT = 23,                    /* OP_NOT  */
-  YYSYMBOL_OP_EQ = 24,                     /* OP_EQ  */
-  YYSYMBOL_OP_NEQ = 25,                    /* OP_NEQ  */
-  YYSYMBOL_OP_GT = 26,                     /* OP_GT  */
-  YYSYMBOL_OP_LT = 27,                     /* OP_LT  */
-  YYSYMBOL_OP_GTE = 28,                    /* OP_GTE  */
-  YYSYMBOL_OP_LTE = 29,                    /* OP_LTE  */
-  YYSYMBOL_LIT_INT = 30,                   /* LIT_INT  */
-  YYSYMBOL_LIT_FLOAT = 31,                 /* LIT_FLOAT  */
-  YYSYMBOL_LIT_CHAR = 32,                  /* LIT_CHAR  */
-  YYSYMBOL_LIT_STRING = 33,                /* LIT_STRING  */
-  YYSYMBOL_LIT_BOOL = 34,                  /* LIT_BOOL  */
-  YYSYMBOL_ID = 35,                        /* ID  */
-  YYSYMBOL_ACORDE_LIVRE = 36,              /* ACORDE_LIVRE  */
-  YYSYMBOL_DECL_SEM_INICIALIZACAO = 37,    /* DECL_SEM_INICIALIZACAO  */
-  YYSYMBOL_YYACCEPT = 38,                  /* $accept  */
-  YYSYMBOL_program = 39,                   /* program  */
-  YYSYMBOL_decl_list = 40,                 /* decl_list  */
-  YYSYMBOL_decl = 41,                      /* decl  */
-  YYSYMBOL_var_decl = 42,                  /* var_decl  */
-  YYSYMBOL_func_decl = 43,                 /* func_decl  */
-  YYSYMBOL_param_list = 44,                /* param_list  */
-  YYSYMBOL_param = 45,                     /* param  */
-  YYSYMBOL_stmt_list = 46,                 /* stmt_list  */
-  YYSYMBOL_stmt = 47,                      /* stmt  */
-  YYSYMBOL_operando = 48,                  /* operando  */
-  YYSYMBOL_op_binario = 49,                /* op_binario  */
-  YYSYMBOL_op_unario = 50,                 /* op_unario  */
-  YYSYMBOL_if_stmt = 51,                   /* if_stmt  */
-  YYSYMBOL_while_stmt = 52,                /* while_stmt  */
-  YYSYMBOL_return_stmt = 53,               /* return_stmt  */
-  YYSYMBOL_break_stmt = 54,                /* break_stmt  */
-  YYSYMBOL_continue_stmt = 55,             /* continue_stmt  */
-  YYSYMBOL_func_call_stmt = 56,            /* func_call_stmt  */
-  YYSYMBOL_operando_list = 57,             /* operando_list  */
-  YYSYMBOL_read_list_stmt = 58,            /* read_list_stmt  */
-  YYSYMBOL_write_list_stmt = 59            /* write_list_stmt  */
+  YYSYMBOL_CALL = 7,                       /* CALL  */
+  YYSYMBOL_IF = 8,                         /* IF  */
+  YYSYMBOL_ELSE = 9,                       /* ELSE  */
+  YYSYMBOL_WHILE = 10,                     /* WHILE  */
+  YYSYMBOL_KW_RETURN = 11,                 /* KW_RETURN  */
+  YYSYMBOL_KW_BREAK = 12,                  /* KW_BREAK  */
+  YYSYMBOL_KW_CONTINUE = 13,               /* KW_CONTINUE  */
+  YYSYMBOL_BLOCO_INI = 14,                 /* BLOCO_INI  */
+  YYSYMBOL_END_BLOCO = 15,                 /* END_BLOCO  */
+  YYSYMBOL_READ_LIST = 16,                 /* READ_LIST  */
+  YYSYMBOL_WRITE_LIST = 17,                /* WRITE_LIST  */
+  YYSYMBOL_OP_ADD = 18,                    /* OP_ADD  */
+  YYSYMBOL_OP_SUB = 19,                    /* OP_SUB  */
+  YYSYMBOL_OP_MUL = 20,                    /* OP_MUL  */
+  YYSYMBOL_OP_DIV = 21,                    /* OP_DIV  */
+  YYSYMBOL_OP_AND = 22,                    /* OP_AND  */
+  YYSYMBOL_OP_OR = 23,                     /* OP_OR  */
+  YYSYMBOL_OP_NOT = 24,                    /* OP_NOT  */
+  YYSYMBOL_OP_EQ = 25,                     /* OP_EQ  */
+  YYSYMBOL_OP_NEQ = 26,                    /* OP_NEQ  */
+  YYSYMBOL_OP_GT = 27,                     /* OP_GT  */
+  YYSYMBOL_OP_LT = 28,                     /* OP_LT  */
+  YYSYMBOL_OP_GTE = 29,                    /* OP_GTE  */
+  YYSYMBOL_OP_LTE = 30,                    /* OP_LTE  */
+  YYSYMBOL_LIT_INT = 31,                   /* LIT_INT  */
+  YYSYMBOL_LIT_FLOAT = 32,                 /* LIT_FLOAT  */
+  YYSYMBOL_LIT_BOOL = 33,                  /* LIT_BOOL  */
+  YYSYMBOL_ID = 34,                        /* ID  */
+  YYSYMBOL_ACORDE_LIVRE = 35,              /* ACORDE_LIVRE  */
+  YYSYMBOL_NULL_LIT = 36,                  /* NULL_LIT  */
+  YYSYMBOL_37_ = 37,                       /* '['  */
+  YYSYMBOL_38_ = 38,                       /* ']'  */
+  YYSYMBOL_YYACCEPT = 39,                  /* $accept  */
+  YYSYMBOL_program = 40,                   /* program  */
+  YYSYMBOL_decl_list = 41,                 /* decl_list  */
+  YYSYMBOL_decl = 42,                      /* decl  */
+  YYSYMBOL_var_decl = 43,                  /* var_decl  */
+  YYSYMBOL_func_decl = 44,                 /* func_decl  */
+  YYSYMBOL_func_header = 45,               /* func_header  */
+  YYSYMBOL_param_list = 46,                /* param_list  */
+  YYSYMBOL_param = 47,                     /* param  */
+  YYSYMBOL_stmt_list = 48,                 /* stmt_list  */
+  YYSYMBOL_stmt = 49,                      /* stmt  */
+  YYSYMBOL_if_stmt = 50,                   /* if_stmt  */
+  YYSYMBOL_while_stmt = 51,                /* while_stmt  */
+  YYSYMBOL_return_stmt = 52,               /* return_stmt  */
+  YYSYMBOL_break_stmt = 53,                /* break_stmt  */
+  YYSYMBOL_continue_stmt = 54,             /* continue_stmt  */
+  YYSYMBOL_read_list_stmt = 55,            /* read_list_stmt  */
+  YYSYMBOL_write_list_stmt = 56,           /* write_list_stmt  */
+  YYSYMBOL_func_call_stmt = 57,            /* func_call_stmt  */
+  YYSYMBOL_58_1 = 58,                      /* $@1  */
+  YYSYMBOL_operando_list = 59,             /* operando_list  */
+  YYSYMBOL_op_binario = 60,                /* op_binario  */
+  YYSYMBOL_op_unario = 61,                 /* op_unario  */
+  YYSYMBOL_operando = 62                   /* operando  */
 };
 typedef enum yysymbol_kind_t yysymbol_kind_t;
 
@@ -524,21 +592,21 @@ union yyalloc
 #endif /* !YYCOPY_NEEDED */
 
 /* YYFINAL -- State number of the termination state.  */
-#define YYFINAL  69
+#define YYFINAL  70
 /* YYLAST -- Last index in YYTABLE.  */
-#define YYLAST   246
+#define YYLAST   278
 
 /* YYNTOKENS -- Number of terminals.  */
-#define YYNTOKENS  38
+#define YYNTOKENS  39
 /* YYNNTS -- Number of nonterminals.  */
-#define YYNNTS  22
+#define YYNNTS  24
 /* YYNRULES -- Number of rules.  */
-#define YYNRULES  58
+#define YYNRULES  60
 /* YYNSTATES -- Number of states.  */
-#define YYNSTATES  148
+#define YYNSTATES  160
 
 /* YYMAXUTOK -- Last valid token kind.  */
-#define YYMAXUTOK   292
+#define YYMAXUTOK   291
 
 
 /* YYTRANSLATE(TOKEN-NUM) -- Symbol number corresponding to TOKEN-NUM
@@ -561,7 +629,7 @@ static const yytype_int8 yytranslate[] =
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
-       2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
+       2,    37,     2,    38,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
        2,     2,     2,     2,     2,     2,     2,     2,     2,     2,
@@ -581,19 +649,20 @@ static const yytype_int8 yytranslate[] =
        5,     6,     7,     8,     9,    10,    11,    12,    13,    14,
       15,    16,    17,    18,    19,    20,    21,    22,    23,    24,
       25,    26,    27,    28,    29,    30,    31,    32,    33,    34,
-      35,    36,    37
+      35,    36
 };
 
 #if YYDEBUG
 /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_int16 yyrline[] =
 {
-       0,   127,   127,   128,   133,   134,   138,   139,   149,   151,
-     159,   161,   167,   168,   172,   179,   180,   184,   185,   186,
-     187,   188,   189,   190,   191,   192,   193,   194,   201,   202,
-     203,   204,   205,   206,   207,   214,   216,   218,   220,   222,
-     224,   226,   228,   230,   232,   234,   236,   244,   251,   252,
-     259,   266,   270,   274,   284,   288,   289,   296,   300
+       0,   152,   152,   152,   153,   153,   154,   154,   162,   167,
+     184,   207,   213,   221,   234,   234,   237,   244,   244,   247,
+     247,   247,   248,   248,   248,   249,   249,   250,   250,   250,
+     257,   272,   293,   313,   327,   328,   335,   367,   393,   393,
+     425,   426,   436,   468,   494,   520,   546,   572,   598,   620,
+     642,   668,   694,   720,   750,   776,   788,   789,   790,   791,
+     792
 };
 #endif
 
@@ -610,16 +679,16 @@ static const char *yysymbol_name (yysymbol_kind_t yysymbol) YY_ATTRIBUTE_UNUSED;
 static const char *const yytname[] =
 {
   "\"end of file\"", "error", "\"invalid token\"", "FIM_LINHA", "TIPO",
-  "VAR", "FUNC", "IF", "ELSE", "WHILE", "KW_RETURN", "KW_BREAK",
+  "VAR", "FUNC", "CALL", "IF", "ELSE", "WHILE", "KW_RETURN", "KW_BREAK",
   "KW_CONTINUE", "BLOCO_INI", "END_BLOCO", "READ_LIST", "WRITE_LIST",
   "OP_ADD", "OP_SUB", "OP_MUL", "OP_DIV", "OP_AND", "OP_OR", "OP_NOT",
   "OP_EQ", "OP_NEQ", "OP_GT", "OP_LT", "OP_GTE", "OP_LTE", "LIT_INT",
-  "LIT_FLOAT", "LIT_CHAR", "LIT_STRING", "LIT_BOOL", "ID", "ACORDE_LIVRE",
-  "DECL_SEM_INICIALIZACAO", "$accept", "program", "decl_list", "decl",
-  "var_decl", "func_decl", "param_list", "param", "stmt_list", "stmt",
-  "operando", "op_binario", "op_unario", "if_stmt", "while_stmt",
-  "return_stmt", "break_stmt", "continue_stmt", "func_call_stmt",
-  "operando_list", "read_list_stmt", "write_list_stmt", YY_NULLPTR
+  "LIT_FLOAT", "LIT_BOOL", "ID", "ACORDE_LIVRE", "NULL_LIT", "'['", "']'",
+  "$accept", "program", "decl_list", "decl", "var_decl", "func_decl",
+  "func_header", "param_list", "param", "stmt_list", "stmt", "if_stmt",
+  "while_stmt", "return_stmt", "break_stmt", "continue_stmt",
+  "read_list_stmt", "write_list_stmt", "func_call_stmt", "$@1",
+  "operando_list", "op_binario", "op_unario", "operando", YY_NULLPTR
 };
 
 static const char *
@@ -629,7 +698,7 @@ yysymbol_name (yysymbol_kind_t yysymbol)
 }
 #endif
 
-#define YYPACT_NINF (-99)
+#define YYPACT_NINF (-87)
 
 #define yypact_value_is_default(Yyn) \
   ((Yyn) == YYPACT_NINF)
@@ -643,21 +712,22 @@ yysymbol_name (yysymbol_kind_t yysymbol)
    STATE-NUM.  */
 static const yytype_int16 yypact[] =
 {
-     186,    12,     9,    10,   196,    29,    36,     5,     7,    11,
-      21,    22,    24,    46,    48,    49,    56,    73,    75,    76,
-      83,   100,   -99,    44,   186,   -99,   -99,   -99,   -99,   -99,
-     -99,   -99,   -99,   -99,   -99,   -99,   -99,   -99,   -99,   102,
-     103,   110,   127,   -99,   -99,   -99,   -99,   -99,   -99,   -99,
-      42,   -99,   -99,   129,   196,   196,   196,   196,   196,   196,
-     196,   196,   196,   196,   196,   196,   196,   196,    18,   -99,
-     -99,    50,   187,   162,   169,   -99,   196,   196,   196,   196,
-     196,   196,   196,   196,   189,   196,   196,   196,   196,   196,
-     196,   -99,   -99,   196,   154,   -99,   212,   -99,   -99,   -99,
-     214,   215,   216,   217,   219,   220,   221,   230,   -99,   231,
-     232,   233,   234,   235,   236,   237,   -99,    51,   -99,   -99,
-      78,   105,   -99,   -99,   -99,   -99,   -99,   -99,   -99,   -99,
-     -99,   -99,   -99,   -99,   -99,   -99,   -99,   194,   -99,   -99,
-     132,   238,   -99,   -99,   228,   -99,   159,   -99
+     200,    39,   -17,     5,     9,    25,    21,    43,    28,    36,
+      45,    63,    64,    67,    72,    90,    91,    94,    99,   117,
+     118,   121,   126,   178,   200,   -87,   -87,   -87,    11,   -87,
+     -87,   -87,   -87,   -87,   -87,   -87,   -87,   -87,   -87,   -87,
+     145,   148,   153,   171,   172,   175,   -87,   -87,   -87,   -87,
+     -87,   -87,   211,   -87,   -87,   181,    25,    25,    25,    25,
+      25,    25,    25,    25,    25,    25,    25,    25,    25,    25,
+     -87,   -87,   197,   -87,    12,   -87,   217,   218,   219,   -87,
+     232,   233,   -87,    25,    25,    25,    25,    25,    25,    25,
+      25,   234,    25,    25,    25,    25,    25,    25,   -87,    65,
+     -87,   -87,   201,    19,   -87,   -87,   -87,   -87,   236,   237,
+     238,   239,   240,   241,   242,   243,   -87,   244,   245,   246,
+     247,   248,   249,    44,   -87,   -87,    92,   222,   -87,   251,
+      32,   119,   146,   -87,   -87,   -87,   -87,   -87,   -87,   -87,
+     -87,   -87,   -87,   -87,   -87,   -87,   -87,   -87,   220,   -87,
+     -87,   -87,   250,   -87,   252,   253,   -87,   -87,   173,   -87
 };
 
 /* YYDEFACT[STATE-NUM] -- Default reduction number in state STATE-NUM.
@@ -667,35 +737,36 @@ static const yytype_int8 yydefact[] =
 {
        3,     0,     0,     0,     0,     0,     0,     0,     0,     0,
        0,     0,     0,     0,     0,     0,     0,     0,     0,     0,
-       0,     0,    56,     0,     2,     5,    17,     6,     7,    18,
-      19,    20,    21,    22,    23,    24,    27,    25,    26,     0,
-       0,     0,     0,    29,    30,    31,    32,    33,    28,    34,
-       0,    52,    53,     0,     0,     0,     0,     0,     0,     0,
-       0,     0,     0,     0,     0,     0,     0,     0,     0,     1,
-       4,     0,     0,     0,     0,    51,     0,     0,     0,     0,
+       0,     0,     0,     0,     2,     5,    19,     6,     0,     7,
+      22,    23,    24,    25,    26,    27,    28,    29,    20,    21,
+       0,     0,     0,     0,     0,     0,    56,    57,    58,    55,
+      60,    59,     0,    34,    35,     0,     0,     0,     0,     0,
        0,     0,     0,     0,     0,     0,     0,     0,     0,     0,
-       0,    54,    55,     8,     0,    16,     0,    13,    16,    16,
-       0,     0,     0,     0,     0,     0,     0,     0,    47,     0,
-       0,     0,     0,     0,     0,     0,    14,     0,    16,    12,
-       0,     0,    57,    58,    35,    36,    37,    38,    39,    40,
-      41,    42,    43,    44,    45,    46,     9,     0,    11,    15,
-       0,    48,    50,    10,     0,    16,     0,    49
+       1,     4,     0,    18,     0,    15,     0,     0,     0,    38,
+       0,     0,    33,     0,     0,     0,     0,     0,     0,     0,
+       0,     0,     0,     0,     0,     0,     0,     0,    16,     0,
+      18,    14,     0,     0,    13,    41,    18,    18,     0,     0,
+       0,     0,     0,     0,     0,     0,    54,     0,     0,     0,
+       0,     0,     0,     0,    12,    17,     0,     0,     8,     0,
+       0,     0,     0,    36,    37,    42,    43,    44,    45,    46,
+      47,    48,    49,    50,    51,    52,    53,    11,     0,     9,
+      39,    40,    30,    32,     0,     0,    10,    18,     0,    31
 };
 
 /* YYPGOTO[NTERM-NUM].  */
 static const yytype_int16 yypgoto[] =
 {
-     -99,   -99,   -99,   218,   -99,   -99,   -99,   147,   -98,    19,
-     -52,   -99,   -99,   -99,   -99,   -99,   -99,   -99,   -99,   -99,
-     -99,   -99
+     -87,   -87,   -87,   254,   -87,   -87,   -87,   -87,   182,   -86,
+      18,   -87,   -87,   -87,   -87,   -87,   -87,   -87,   -87,   -87,
+     -87,   -87,   -87,   -56
 };
 
 /* YYDEFGOTO[NTERM-NUM].  */
 static const yytype_uint8 yydefgoto[] =
 {
-       0,    23,    24,    25,    26,    27,    96,    97,   117,   139,
-      50,    29,    30,    31,    32,    33,    34,    35,    36,    68,
-      37,    38
+       0,    23,    24,    25,    26,    27,    28,    74,    75,    99,
+     125,    30,    31,    32,    33,    34,    35,    36,    37,   105,
+     130,    38,    39,    52
 };
 
 /* YYTABLE[YYPACT[STATE-NUM]] -- What to do in state STATE-NUM.  If
@@ -703,103 +774,112 @@ static const yytype_uint8 yydefgoto[] =
    number is the opposite.  If YYTABLE_NINF, syntax error.  */
 static const yytype_uint8 yytable[] =
 {
-     120,   121,    77,    78,    79,    80,    81,    82,    83,    84,
-      85,    86,    87,    88,    89,    90,    92,    39,    40,    28,
-     140,    91,    41,    42,   100,   101,   102,   103,   104,   105,
-     106,   107,    51,   109,   110,   111,   112,   113,   114,    52,
-      53,   115,    54,    28,    69,    75,    55,   146,    43,    44,
-      45,    46,    47,    48,    49,   137,    56,    57,     2,    58,
-       3,     4,     5,     6,    93,   138,     7,     8,     9,    10,
-      11,    12,    13,    14,    15,    16,    17,    18,    19,    20,
-      21,    59,   137,    60,    61,     2,    22,     3,     4,     5,
-       6,    62,   141,     7,     8,     9,    10,    11,    12,    13,
-      14,    15,    16,    17,    18,    19,    20,    21,    63,   137,
-      64,    65,     2,    22,     3,     4,     5,     6,    66,   142,
-       7,     8,     9,    10,    11,    12,    13,    14,    15,    16,
-      17,    18,    19,    20,    21,    67,   137,    71,    72,     2,
-      22,     3,     4,     5,     6,    73,   143,     7,     8,     9,
+      84,    85,    86,    87,    88,    89,    90,    91,    92,    93,
+      94,    95,    96,    97,   126,    72,    72,    43,    29,    44,
+     131,   132,   128,    45,    53,    73,   100,   108,   109,   110,
+     111,   112,   113,   114,   115,   150,   117,   118,   119,   120,
+     121,   122,    29,    40,    41,    42,    54,   129,    40,    41,
+      46,    47,    48,    49,    50,    51,    46,    47,    48,    49,
+      50,    51,    55,    46,    47,    48,    49,    50,    51,   123,
+      56,   158,     2,     3,   151,     4,     5,     6,     7,    57,
+     124,     8,     9,    10,    11,    12,    13,    14,    15,    16,
+      17,    18,    19,    20,    21,    22,   123,    58,    59,     2,
+       3,    60,     4,     5,     6,     7,    61,   147,     8,     9,
       10,    11,    12,    13,    14,    15,    16,    17,    18,    19,
-      20,    21,    74,   137,    76,    98,     2,    22,     3,     4,
-       5,     6,    99,   147,     7,     8,     9,    10,    11,    12,
-      13,    14,    15,    16,    17,    18,    19,    20,    21,   116,
-       1,    94,   108,     2,    22,     3,     4,     5,     6,    39,
-      95,     7,     8,     9,    10,    11,    12,    13,    14,    15,
-      16,    17,    18,    19,    20,    21,    94,   122,   123,   124,
-     125,    22,   126,   127,   128,   118,    43,    44,    45,    46,
-      47,    48,    49,   129,   130,   131,   132,   133,   134,   135,
-     136,   145,    70,   119,     0,     0,   144
+      20,    21,    22,   123,    62,    63,     2,     3,    64,     4,
+       5,     6,     7,    65,   152,     8,     9,    10,    11,    12,
+      13,    14,    15,    16,    17,    18,    19,    20,    21,    22,
+     123,    66,    67,     2,     3,    68,     4,     5,     6,     7,
+      69,   153,     8,     9,    10,    11,    12,    13,    14,    15,
+      16,    17,    18,    19,    20,    21,    22,   123,    70,    76,
+       2,     3,    77,     4,     5,     6,     7,    78,   159,     8,
+       9,    10,    11,    12,    13,    14,    15,    16,    17,    18,
+      19,    20,    21,    22,     1,    79,    80,     2,     3,    81,
+       4,     5,     6,     7,    82,    83,     8,     9,    10,    11,
+      12,    13,    14,    15,    16,    17,    18,    19,    20,    21,
+      22,    98,   102,   103,   104,   106,   107,   116,   127,   133,
+     134,   135,   136,   137,   138,   139,   140,   141,   142,   143,
+     144,   145,   146,   148,   149,   156,   101,     0,   154,   155,
+       0,     0,     0,     0,     0,     0,     0,   157,     0,     0,
+       0,     0,     0,     0,     0,     0,     0,     0,    71
 };
 
 static const yytype_int16 yycheck[] =
 {
-      98,    99,    54,    55,    56,    57,    58,    59,    60,    61,
-      62,    63,    64,    65,    66,    67,    68,     5,     6,     0,
-     118,     3,    13,    13,    76,    77,    78,    79,    80,    81,
-      82,    83,     3,    85,    86,    87,    88,    89,    90,     3,
-      35,    93,    35,    24,     0,     3,    35,   145,    30,    31,
-      32,    33,    34,    35,    36,     4,    35,    35,     7,    35,
-       9,    10,    11,    12,    14,    14,    15,    16,    17,    18,
-      19,    20,    21,    22,    23,    24,    25,    26,    27,    28,
-      29,    35,     4,    35,    35,     7,    35,     9,    10,    11,
-      12,    35,    14,    15,    16,    17,    18,    19,    20,    21,
-      22,    23,    24,    25,    26,    27,    28,    29,    35,     4,
-      35,    35,     7,    35,     9,    10,    11,    12,    35,    14,
+      56,    57,    58,    59,    60,    61,    62,    63,    64,    65,
+      66,    67,    68,    69,   100,     4,     4,    34,     0,    14,
+     106,   107,     3,    14,     3,    14,    14,    83,    84,    85,
+      86,    87,    88,    89,    90,     3,    92,    93,    94,    95,
+      96,    97,    24,     4,     5,     6,     3,   103,     4,     5,
+      31,    32,    33,    34,    35,    36,    31,    32,    33,    34,
+      35,    36,    34,    31,    32,    33,    34,    35,    36,     4,
+      34,   157,     7,     8,   130,    10,    11,    12,    13,    34,
       15,    16,    17,    18,    19,    20,    21,    22,    23,    24,
-      25,    26,    27,    28,    29,    35,     4,    35,    35,     7,
-      35,     9,    10,    11,    12,    35,    14,    15,    16,    17,
+      25,    26,    27,    28,    29,    30,     4,    34,    34,     7,
+       8,    34,    10,    11,    12,    13,    34,    15,    16,    17,
       18,    19,    20,    21,    22,    23,    24,    25,    26,    27,
-      28,    29,    35,     4,    35,     3,     7,    35,     9,    10,
-      11,    12,     3,    14,    15,    16,    17,    18,    19,    20,
-      21,    22,    23,    24,    25,    26,    27,    28,    29,    35,
-       4,     4,     3,     7,    35,     9,    10,    11,    12,     5,
-      13,    15,    16,    17,    18,    19,    20,    21,    22,    23,
-      24,    25,    26,    27,    28,    29,     4,     3,     3,     3,
-       3,    35,     3,     3,     3,    13,    30,    31,    32,    33,
-      34,    35,    36,     3,     3,     3,     3,     3,     3,     3,
-       3,    13,    24,    96,    -1,    -1,     8
+      28,    29,    30,     4,    34,    34,     7,     8,    34,    10,
+      11,    12,    13,    34,    15,    16,    17,    18,    19,    20,
+      21,    22,    23,    24,    25,    26,    27,    28,    29,    30,
+       4,    34,    34,     7,     8,    34,    10,    11,    12,    13,
+      34,    15,    16,    17,    18,    19,    20,    21,    22,    23,
+      24,    25,    26,    27,    28,    29,    30,     4,     0,    34,
+       7,     8,    34,    10,    11,    12,    13,    34,    15,    16,
+      17,    18,    19,    20,    21,    22,    23,    24,    25,    26,
+      27,    28,    29,    30,     4,    34,    34,     7,     8,    34,
+      10,    11,    12,    13,     3,    34,    16,    17,    18,    19,
+      20,    21,    22,    23,    24,    25,    26,    27,    28,    29,
+      30,    34,    15,    15,    15,     3,     3,     3,    37,     3,
+       3,     3,     3,     3,     3,     3,     3,     3,     3,     3,
+       3,     3,     3,    31,     3,     3,    74,    -1,    38,     9,
+      -1,    -1,    -1,    -1,    -1,    -1,    -1,    14,    -1,    -1,
+      -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    24
 };
 
 /* YYSTOS[STATE-NUM] -- The symbol kind of the accessing symbol of
    state STATE-NUM.  */
 static const yytype_int8 yystos[] =
 {
-       0,     4,     7,     9,    10,    11,    12,    15,    16,    17,
+       0,     4,     7,     8,    10,    11,    12,    13,    16,    17,
       18,    19,    20,    21,    22,    23,    24,    25,    26,    27,
-      28,    29,    35,    39,    40,    41,    42,    43,    47,    49,
-      50,    51,    52,    53,    54,    55,    56,    58,    59,     5,
-       6,    13,    13,    30,    31,    32,    33,    34,    35,    36,
-      48,     3,     3,    35,    35,    35,    35,    35,    35,    35,
-      35,    35,    35,    35,    35,    35,    35,    35,    57,     0,
-      41,    35,    35,    35,    35,     3,    35,    48,    48,    48,
-      48,    48,    48,    48,    48,    48,    48,    48,    48,    48,
-      48,     3,    48,    14,     4,    13,    44,    45,     3,     3,
-      48,    48,    48,    48,    48,    48,    48,    48,     3,    48,
-      48,    48,    48,    48,    48,    48,    35,    46,    13,    45,
-      46,    46,     3,     3,     3,     3,     3,     3,     3,     3,
-       3,     3,     3,     3,     3,     3,     3,     4,    14,    47,
-      46,    14,    14,    14,     8,    13,    46,    14
+      28,    29,    30,    40,    41,    42,    43,    44,    45,    49,
+      50,    51,    52,    53,    54,    55,    56,    57,    60,    61,
+       4,     5,     6,    34,    14,    14,    31,    32,    33,    34,
+      35,    36,    62,     3,     3,    34,    34,    34,    34,    34,
+      34,    34,    34,    34,    34,    34,    34,    34,    34,    34,
+       0,    42,     4,    14,    46,    47,    34,    34,    34,    34,
+      34,    34,     3,    34,    62,    62,    62,    62,    62,    62,
+      62,    62,    62,    62,    62,    62,    62,    62,    34,    48,
+      14,    47,    15,    15,    15,    58,     3,     3,    62,    62,
+      62,    62,    62,    62,    62,    62,     3,    62,    62,    62,
+      62,    62,    62,     4,    15,    49,    48,    37,     3,    62,
+      59,    48,    48,     3,     3,     3,     3,     3,     3,     3,
+       3,     3,     3,     3,     3,     3,     3,    15,    31,     3,
+       3,    62,    15,    15,    38,     9,     3,    14,    48,    15
 };
 
 /* YYR1[RULE-NUM] -- Symbol kind of the left-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr1[] =
 {
-       0,    38,    39,    39,    40,    40,    41,    41,    42,    42,
-      43,    43,    44,    44,    45,    46,    46,    47,    47,    47,
-      47,    47,    47,    47,    47,    47,    47,    47,    48,    48,
-      48,    48,    48,    48,    48,    49,    49,    49,    49,    49,
-      49,    49,    49,    49,    49,    49,    49,    50,    51,    51,
-      52,    53,    54,    55,    56,    57,    57,    58,    59
+       0,    39,    40,    40,    41,    41,    42,    42,    43,    43,
+      43,    44,    44,    45,    46,    46,    47,    48,    48,    49,
+      49,    49,    49,    49,    49,    49,    49,    49,    49,    49,
+      50,    50,    51,    52,    53,    54,    55,    56,    58,    57,
+      59,    59,    60,    60,    60,    60,    60,    60,    60,    60,
+      60,    60,    60,    60,    61,    62,    62,    62,    62,    62,
+      62
 };
 
 /* YYR2[RULE-NUM] -- Number of symbols on the right-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr2[] =
 {
-       0,     2,     1,     0,     2,     1,     1,     1,     4,     6,
-       7,     6,     2,     1,     2,     2,     0,     1,     1,     1,
+       0,     2,     1,     0,     2,     1,     1,     1,     5,     6,
+       8,     5,     4,     4,     2,     1,     2,     2,     0,     1,
        1,     1,     1,     1,     1,     1,     1,     1,     1,     1,
-       1,     1,     1,     1,     1,     5,     5,     5,     5,     5,
-       5,     5,     5,     5,     5,     5,     5,     4,     6,    10,
-       6,     3,     2,     2,     3,     2,     0,     5,     5
+       6,    10,     6,     3,     2,     2,     5,     5,     0,     6,
+       2,     0,     5,     5,     5,     5,     5,     5,     5,     5,
+       5,     5,     5,     5,     4,     1,     1,     1,     1,     1,
+       1
 };
 
 
@@ -1262,146 +1342,663 @@ yyreduce:
   YY_REDUCE_PRINT (yyn);
   switch (yyn)
     {
-  case 8: /* var_decl: TIPO VAR ID END_BLOCO  */
-#line 150 "yacc/translate.y"
-        { inserir_simbolo((yyvsp[-1].sval), (yyvsp[-3].sval), "variavel", yylineno); }
-#line 1269 "yacc/translate.tab.c"
+  case 8: /* var_decl: TIPO VAR ID END_BLOCO FIM_LINHA  */
+#line 163 "yacc/translate.y"
+    {
+        inserir_simbolo((yyvsp[-2].sval), (yyvsp[-4].sval), "variavel", yylineno);
+    }
+#line 1351 "yacc/translate.tab.c"
     break;
 
   case 9: /* var_decl: TIPO VAR ID END_BLOCO operando FIM_LINHA  */
-#line 152 "yacc/translate.y"
-        { inserir_simbolo((yyvsp[-3].sval), (yyvsp[-5].sval), "variavel", yylineno); }
-#line 1275 "yacc/translate.tab.c"
+#line 168 "yacc/translate.y"
+    {
+        Tipo t_decl = tipo_de_texto((yyvsp[-5].sval));
+        if ((yyvsp[-1].tval) != TIPO_NULL && (yyvsp[-1].tval) != t_decl) {
+            char msg[400];
+            snprintf(msg, sizeof(msg),
+                "variavel '%s': valor inicial incompativel com tipo declarado", (yyvsp[-3].sval));
+            erro_semantico(msg, yylineno);
+        }
+        inserir_simbolo((yyvsp[-3].sval), (yyvsp[-5].sval), "variavel", yylineno);
+    }
+#line 1366 "yacc/translate.tab.c"
     break;
 
-  case 10: /* func_decl: TIPO FUNC ID param_list BLOCO_INI stmt_list END_BLOCO  */
-#line 160 "yacc/translate.y"
-        { inserir_simbolo((yyvsp[-4].sval), (yyvsp[-6].sval), "funcao", yylineno); }
-#line 1281 "yacc/translate.tab.c"
+  case 10: /* var_decl: TIPO TIPO ID END_BLOCO '[' LIT_INT ']' FIM_LINHA  */
+#line 185 "yacc/translate.y"
+    {
+        if (strcmp((yyvsp[-7].sval), "C7") != 0) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "vetor '%s': tipo composto esperado e C7 (lista)", (yyvsp[-5].sval));
+            erro_semantico(msg, yylineno);
+        }
+        if ((yyvsp[-2].ival) <= 0) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "vetor '%s': tamanho deve ser > 0 (recebeu %d)", (yyvsp[-5].sval), (yyvsp[-2].ival));
+            erro_semantico(msg, yylineno);
+        }
+        inserir_simbolo((yyvsp[-5].sval), (yyvsp[-7].sval), "variavel", yylineno);
+        registrar_vetor((yyvsp[-5].sval), (yyvsp[-2].ival));
+    }
+#line 1385 "yacc/translate.tab.c"
     break;
 
-  case 11: /* func_decl: TIPO FUNC ID BLOCO_INI stmt_list END_BLOCO  */
-#line 162 "yacc/translate.y"
-        { inserir_simbolo((yyvsp[-3].sval), (yyvsp[-5].sval), "funcao", yylineno); }
-#line 1287 "yacc/translate.tab.c"
-    break;
-
-  case 28: /* operando: ID  */
-#line 201 "yacc/translate.y"
-                     { strcpy((yyval.sval), (yyvsp[0].sval)); }
-#line 1293 "yacc/translate.tab.c"
-    break;
-
-  case 29: /* operando: LIT_INT  */
-#line 202 "yacc/translate.y"
-                     { sprintf((yyval.sval), "%d", (yyvsp[0].ival)); }
-#line 1299 "yacc/translate.tab.c"
-    break;
-
-  case 30: /* operando: LIT_FLOAT  */
-#line 203 "yacc/translate.y"
-                     { sprintf((yyval.sval), "%f", (yyvsp[0].fval)); }
-#line 1305 "yacc/translate.tab.c"
-    break;
-
-  case 31: /* operando: LIT_CHAR  */
-#line 204 "yacc/translate.y"
-                     { strcpy((yyval.sval), (yyvsp[0].sval)); }
-#line 1311 "yacc/translate.tab.c"
-    break;
-
-  case 32: /* operando: LIT_STRING  */
-#line 205 "yacc/translate.y"
-                     { strcpy((yyval.sval), (yyvsp[0].sval)); }
-#line 1317 "yacc/translate.tab.c"
-    break;
-
-  case 33: /* operando: LIT_BOOL  */
-#line 206 "yacc/translate.y"
-                     { sprintf((yyval.sval), "%d", (yyvsp[0].ival)); }
-#line 1323 "yacc/translate.tab.c"
-    break;
-
-  case 34: /* operando: ACORDE_LIVRE  */
-#line 207 "yacc/translate.y"
-                     { strcpy((yyval.sval), (yyvsp[0].sval)); }
-#line 1329 "yacc/translate.tab.c"
-    break;
-
-  case 35: /* op_binario: OP_ADD ID operando operando FIM_LINHA  */
-#line 215 "yacc/translate.y"
-        { verificar_operacao_binaria((yyvsp[-3].sval), (yyvsp[-2].sval), (yyvsp[-1].sval), "soma"); }
-#line 1335 "yacc/translate.tab.c"
-    break;
-
-  case 36: /* op_binario: OP_SUB ID operando operando FIM_LINHA  */
-#line 217 "yacc/translate.y"
-        { verificar_operacao_binaria((yyvsp[-3].sval), (yyvsp[-2].sval), (yyvsp[-1].sval), "subtracao"); }
-#line 1341 "yacc/translate.tab.c"
-    break;
-
-  case 37: /* op_binario: OP_MUL ID operando operando FIM_LINHA  */
-#line 219 "yacc/translate.y"
-        { verificar_operacao_binaria((yyvsp[-3].sval), (yyvsp[-2].sval), (yyvsp[-1].sval), "multiplicacao"); }
-#line 1347 "yacc/translate.tab.c"
-    break;
-
-  case 38: /* op_binario: OP_DIV ID operando operando FIM_LINHA  */
-#line 221 "yacc/translate.y"
-        { verificar_operacao_binaria((yyvsp[-3].sval), (yyvsp[-2].sval), (yyvsp[-1].sval), "divisao"); }
-#line 1353 "yacc/translate.tab.c"
-    break;
-
-  case 39: /* op_binario: OP_AND ID operando operando FIM_LINHA  */
-#line 223 "yacc/translate.y"
-        { verificar_operacao_binaria((yyvsp[-3].sval), (yyvsp[-2].sval), (yyvsp[-1].sval), "and"); }
-#line 1359 "yacc/translate.tab.c"
-    break;
-
-  case 40: /* op_binario: OP_OR ID operando operando FIM_LINHA  */
-#line 225 "yacc/translate.y"
-        { verificar_operacao_binaria((yyvsp[-3].sval), (yyvsp[-2].sval), (yyvsp[-1].sval), "or"); }
-#line 1365 "yacc/translate.tab.c"
-    break;
-
-  case 41: /* op_binario: OP_EQ ID operando operando FIM_LINHA  */
-#line 227 "yacc/translate.y"
-        { verificar_operacao_binaria((yyvsp[-3].sval), (yyvsp[-2].sval), (yyvsp[-1].sval), "igual"); }
-#line 1371 "yacc/translate.tab.c"
-    break;
-
-  case 42: /* op_binario: OP_NEQ ID operando operando FIM_LINHA  */
-#line 229 "yacc/translate.y"
-        { verificar_operacao_binaria((yyvsp[-3].sval), (yyvsp[-2].sval), (yyvsp[-1].sval), "diferente"); }
-#line 1377 "yacc/translate.tab.c"
-    break;
-
-  case 43: /* op_binario: OP_GT ID operando operando FIM_LINHA  */
-#line 231 "yacc/translate.y"
-        { verificar_operacao_binaria((yyvsp[-3].sval), (yyvsp[-2].sval), (yyvsp[-1].sval), "maior"); }
-#line 1383 "yacc/translate.tab.c"
-    break;
-
-  case 44: /* op_binario: OP_LT ID operando operando FIM_LINHA  */
-#line 233 "yacc/translate.y"
-        { verificar_operacao_binaria((yyvsp[-3].sval), (yyvsp[-2].sval), (yyvsp[-1].sval), "menor"); }
-#line 1389 "yacc/translate.tab.c"
-    break;
-
-  case 45: /* op_binario: OP_GTE ID operando operando FIM_LINHA  */
-#line 235 "yacc/translate.y"
-        { verificar_operacao_binaria((yyvsp[-3].sval), (yyvsp[-2].sval), (yyvsp[-1].sval), "maior ou igual"); }
+  case 11: /* func_decl: func_header param_list BLOCO_INI stmt_list END_BLOCO  */
+#line 208 "yacc/translate.y"
+    {
+        registrar_assinatura(nome_funcao_atual, tipo_retorno_atual,
+                             contagem_params_atual);
+        sairTabelaSimbolo(&tabelaAtual);
+    }
 #line 1395 "yacc/translate.tab.c"
     break;
 
-  case 46: /* op_binario: OP_LTE ID operando operando FIM_LINHA  */
-#line 237 "yacc/translate.y"
-        { verificar_operacao_binaria((yyvsp[-3].sval), (yyvsp[-2].sval), (yyvsp[-1].sval), "menor ou igual"); }
-#line 1401 "yacc/translate.tab.c"
+  case 12: /* func_decl: func_header BLOCO_INI stmt_list END_BLOCO  */
+#line 214 "yacc/translate.y"
+    {
+        registrar_assinatura(nome_funcao_atual, tipo_retorno_atual, 0);
+        sairTabelaSimbolo(&tabelaAtual);
+    }
+#line 1404 "yacc/translate.tab.c"
+    break;
+
+  case 13: /* func_header: TIPO FUNC ID END_BLOCO  */
+#line 222 "yacc/translate.y"
+    {
+        inserir_simbolo((yyvsp[-1].sval), (yyvsp[-3].sval), "funcao", yylineno);
+        tipo_retorno_atual    = tipo_de_texto((yyvsp[-3].sval));
+        strncpy(nome_funcao_atual, (yyvsp[-1].sval), 49);
+        contagem_params_atual = 0;
+
+        TabelaSimbolo *filho = criarTabelaSimbolo((yyvsp[-1].sval), tabelaAtual);
+        adicionarFilho(tabelaAtual, filho);
+        entrarTabalaSimbolo(&tabelaAtual, filho);
+    }
+#line 1419 "yacc/translate.tab.c"
+    break;
+
+  case 16: /* param: TIPO ID  */
+#line 238 "yacc/translate.y"
+    {
+        inserir_simbolo((yyvsp[0].sval), (yyvsp[-1].sval), "parametro", yylineno);
+        contagem_params_atual++;
+    }
+#line 1428 "yacc/translate.tab.c"
+    break;
+
+  case 30: /* if_stmt: IF BLOCO_INI ID FIM_LINHA stmt_list END_BLOCO  */
+#line 258 "yacc/translate.y"
+    {
+        Simbolo *s = buscarSimbolo(tabelaAtual, (yyvsp[-3].sval));
+        if (s == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "IF: nota guia '%s' nao declarada", (yyvsp[-3].sval));
+            erro_semantico(msg, yylineno);
+        } else if (s->tipo != TIPO_BOOL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "IF: nota guia '%s' deve ser bool, mas e %s",
+                (yyvsp[-3].sval), tipoParaString(s->tipo));
+            erro_semantico(msg, yylineno);
+        }
+    }
+#line 1446 "yacc/translate.tab.c"
+    break;
+
+  case 31: /* if_stmt: IF BLOCO_INI ID FIM_LINHA stmt_list END_BLOCO ELSE BLOCO_INI stmt_list END_BLOCO  */
+#line 274 "yacc/translate.y"
+    {
+        Simbolo *s = buscarSimbolo(tabelaAtual, (yyvsp[-7].sval));
+        if (s == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "IF/ELSE: nota guia '%s' nao declarada", (yyvsp[-7].sval));
+            erro_semantico(msg, yylineno);
+        } else if (s->tipo != TIPO_BOOL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "IF/ELSE: nota guia '%s' deve ser bool, mas e %s",
+                (yyvsp[-7].sval), tipoParaString(s->tipo));
+            erro_semantico(msg, yylineno);
+        }
+    }
+#line 1464 "yacc/translate.tab.c"
+    break;
+
+  case 32: /* while_stmt: WHILE BLOCO_INI ID FIM_LINHA stmt_list END_BLOCO  */
+#line 294 "yacc/translate.y"
+    {
+        Simbolo *s = buscarSimbolo(tabelaAtual, (yyvsp[-3].sval));
+        if (s == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "WHILE: nota guia '%s' nao declarada", (yyvsp[-3].sval));
+            erro_semantico(msg, yylineno);
+        } else if (s->tipo != TIPO_BOOL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "WHILE: nota guia '%s' deve ser bool, mas e %s",
+                (yyvsp[-3].sval), tipoParaString(s->tipo));
+            erro_semantico(msg, yylineno);
+        }
+    }
+#line 1482 "yacc/translate.tab.c"
+    break;
+
+  case 33: /* return_stmt: KW_RETURN operando FIM_LINHA  */
+#line 314 "yacc/translate.y"
+    {
+        if (nome_funcao_atual[0] == '\0') {
+            erro_semantico("return (Am) usado fora de uma funcao", yylineno);
+        } else if ((yyvsp[-1].tval) != TIPO_NULL && (yyvsp[-1].tval) != tipo_retorno_atual) {
+            char msg[400];
+            snprintf(msg, sizeof(msg),
+                "return em '%s': tipo retornado (%s) incompativel com retorno declarado (%s)",
+                nome_funcao_atual, tipoParaString((yyvsp[-1].tval)), tipoParaString(tipo_retorno_atual));
+            erro_semantico(msg, yylineno);
+        }
+    }
+#line 1498 "yacc/translate.tab.c"
+    break;
+
+  case 36: /* read_list_stmt: READ_LIST ID ID operando FIM_LINHA  */
+#line 336 "yacc/translate.y"
+    {
+        Simbolo *dest  = buscarSimbolo(tabelaAtual, (yyvsp[-3].sval));
+        Simbolo *lista = buscarSimbolo(tabelaAtual, (yyvsp[-2].sval));
+
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "ReadList: destino '%s' nao declarado", (yyvsp[-3].sval));
+            erro_semantico(msg, yylineno);
+        }
+        if (lista == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "ReadList: '%s' nao declarado", (yyvsp[-2].sval));
+            erro_semantico(msg, yylineno);
+        } else if (lista->tipo != TIPO_LISTA) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "ReadList: '%s' nao e uma lista (e %s)", (yyvsp[-2].sval), tipoParaString(lista->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if ((yyvsp[-1].tval) != TIPO_INT) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "ReadList: indice deve ser int, mas e %s", tipoParaString((yyvsp[-1].tval)));
+            erro_semantico(msg, yylineno);
+        }
+    }
+#line 1527 "yacc/translate.tab.c"
+    break;
+
+  case 37: /* write_list_stmt: WRITE_LIST ID operando operando FIM_LINHA  */
+#line 368 "yacc/translate.y"
+    {
+        Simbolo *lista = buscarSimbolo(tabelaAtual, (yyvsp[-3].sval));
+
+        if (lista == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "WriteList: '%s' nao declarado", (yyvsp[-3].sval));
+            erro_semantico(msg, yylineno);
+        } else if (lista->tipo != TIPO_LISTA) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "WriteList: '%s' nao e uma lista (e %s)", (yyvsp[-3].sval), tipoParaString(lista->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if ((yyvsp[-2].tval) != TIPO_INT) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "WriteList: indice deve ser int, mas e %s", tipoParaString((yyvsp[-2].tval)));
+            erro_semantico(msg, yylineno);
+        }
+    }
+#line 1550 "yacc/translate.tab.c"
+    break;
+
+  case 38: /* $@1: %empty  */
+#line 393 "yacc/translate.y"
+                 { contagem_args_atual = 0; }
+#line 1556 "yacc/translate.tab.c"
+    break;
+
+  case 39: /* func_call_stmt: CALL ID ID $@1 operando_list FIM_LINHA  */
+#line 394 "yacc/translate.y"
+    {
+        Simbolo          *dest = buscarSimbolo(tabelaAtual, (yyvsp[-4].sval));
+        AssinaturaFuncao *sig  = buscar_assinatura((yyvsp[-3].sval));
+
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "CALL: destino '%s' nao declarado", (yyvsp[-4].sval));
+            erro_semantico(msg, yylineno);
+        }
+        if (sig == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "CALL: funcao '%s' nao declarada (declare antes de chamar)", (yyvsp[-3].sval));
+            erro_semantico(msg, yylineno);
+        } else {
+            if (contagem_args_atual != sig->num_params) {
+                char msg[400]; snprintf(msg, sizeof(msg),
+                    "CALL '%s': esperava %d argumento(s), recebeu %d",
+                    (yyvsp[-3].sval), sig->num_params, contagem_args_atual);
+                erro_semantico(msg, yylineno);
+            }
+            if (dest != NULL && dest->tipo != sig->retorno) {
+                char msg[400]; snprintf(msg, sizeof(msg),
+                    "CALL '%s': retorno (%s) incompativel com destino '%s' (%s)",
+                    (yyvsp[-3].sval), tipoParaString(sig->retorno), (yyvsp[-4].sval), tipoParaString(dest->tipo));
+                erro_semantico(msg, yylineno);
+            }
+        }
+    }
+#line 1589 "yacc/translate.tab.c"
+    break;
+
+  case 40: /* operando_list: operando_list operando  */
+#line 425 "yacc/translate.y"
+                             { contagem_args_atual++; }
+#line 1595 "yacc/translate.tab.c"
+    break;
+
+  case 42: /* op_binario: OP_ADD ID operando operando FIM_LINHA  */
+#line 437 "yacc/translate.y"
+    {
+        Simbolo *dest = buscarSimbolo(tabelaAtual, (yyvsp[-3].sval));
+        int eh_atribuicao_null_em_lista =
+            dest != NULL && dest->tipo == TIPO_LISTA &&
+            ((yyvsp[-2].tval) == TIPO_NULL || (yyvsp[-1].tval) == TIPO_NULL);
+
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "soma (C/E): destino '%s' nao declarado", (yyvsp[-3].sval));
+            erro_semantico(msg, yylineno);
+        } else if (!tipo_numerico(dest->tipo) && !eh_atribuicao_null_em_lista) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "soma (C/E): destino '%s' deve ser numerico, mas e %s",
+                (yyvsp[-3].sval), tipoParaString(dest->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if (!eh_atribuicao_null_em_lista) {
+            if (!tipo_numerico((yyvsp[-2].tval)) && (yyvsp[-2].tval) != TIPO_NULL) {
+                char msg[400]; snprintf(msg, sizeof(msg),
+                    "soma (C/E): operando 1 deve ser numerico, mas e %s", tipoParaString((yyvsp[-2].tval)));
+                erro_semantico(msg, yylineno);
+            }
+            if (!tipo_numerico((yyvsp[-1].tval)) && (yyvsp[-1].tval) != TIPO_NULL) {
+                char msg[400]; snprintf(msg, sizeof(msg),
+                    "soma (C/E): operando 2 deve ser numerico, mas e %s", tipoParaString((yyvsp[-1].tval)));
+                erro_semantico(msg, yylineno);
+            }
+        }
+    }
+#line 1629 "yacc/translate.tab.c"
+    break;
+
+  case 43: /* op_binario: OP_SUB ID operando operando FIM_LINHA  */
+#line 469 "yacc/translate.y"
+    {
+        Simbolo *dest = buscarSimbolo(tabelaAtual, (yyvsp[-3].sval));
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "subtracao (Dm/F#): destino '%s' nao declarado", (yyvsp[-3].sval));
+            erro_semantico(msg, yylineno);
+        } else if (!tipo_numerico(dest->tipo)) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "subtracao (Dm/F#): destino '%s' deve ser numerico, mas e %s",
+                (yyvsp[-3].sval), tipoParaString(dest->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico((yyvsp[-2].tval)) && (yyvsp[-2].tval) != TIPO_NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "subtracao (Dm/F#): operando 1 deve ser numerico, mas e %s", tipoParaString((yyvsp[-2].tval)));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico((yyvsp[-1].tval)) && (yyvsp[-1].tval) != TIPO_NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "subtracao (Dm/F#): operando 2 deve ser numerico, mas e %s", tipoParaString((yyvsp[-1].tval)));
+            erro_semantico(msg, yylineno);
+        }
+    }
+#line 1657 "yacc/translate.tab.c"
+    break;
+
+  case 44: /* op_binario: OP_MUL ID operando operando FIM_LINHA  */
+#line 495 "yacc/translate.y"
+    {
+        Simbolo *dest = buscarSimbolo(tabelaAtual, (yyvsp[-3].sval));
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "multiplicacao (E/G): destino '%s' nao declarado", (yyvsp[-3].sval));
+            erro_semantico(msg, yylineno);
+        } else if (!tipo_numerico(dest->tipo)) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "multiplicacao (E/G): destino '%s' deve ser numerico, mas e %s",
+                (yyvsp[-3].sval), tipoParaString(dest->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico((yyvsp[-2].tval)) && (yyvsp[-2].tval) != TIPO_NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "multiplicacao (E/G): operando 1 deve ser numerico, mas e %s", tipoParaString((yyvsp[-2].tval)));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico((yyvsp[-1].tval)) && (yyvsp[-1].tval) != TIPO_NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "multiplicacao (E/G): operando 2 deve ser numerico, mas e %s", tipoParaString((yyvsp[-1].tval)));
+            erro_semantico(msg, yylineno);
+        }
+    }
+#line 1685 "yacc/translate.tab.c"
+    break;
+
+  case 45: /* op_binario: OP_DIV ID operando operando FIM_LINHA  */
+#line 521 "yacc/translate.y"
+    {
+        Simbolo *dest = buscarSimbolo(tabelaAtual, (yyvsp[-3].sval));
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "divisao (F/A): destino '%s' nao declarado", (yyvsp[-3].sval));
+            erro_semantico(msg, yylineno);
+        } else if (!tipo_numerico(dest->tipo)) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "divisao (F/A): destino '%s' deve ser numerico, mas e %s",
+                (yyvsp[-3].sval), tipoParaString(dest->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico((yyvsp[-2].tval)) && (yyvsp[-2].tval) != TIPO_NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "divisao (F/A): operando 1 deve ser numerico, mas e %s", tipoParaString((yyvsp[-2].tval)));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico((yyvsp[-1].tval)) && (yyvsp[-1].tval) != TIPO_NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "divisao (F/A): operando 2 deve ser numerico, mas e %s", tipoParaString((yyvsp[-1].tval)));
+            erro_semantico(msg, yylineno);
+        }
+    }
+#line 1713 "yacc/translate.tab.c"
+    break;
+
+  case 46: /* op_binario: OP_AND ID operando operando FIM_LINHA  */
+#line 547 "yacc/translate.y"
+    {
+        Simbolo *dest = buscarSimbolo(tabelaAtual, (yyvsp[-3].sval));
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "and (G/B): destino '%s' nao declarado", (yyvsp[-3].sval));
+            erro_semantico(msg, yylineno);
+        } else if (dest->tipo != TIPO_BOOL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "and (G/B): destino '%s' deve ser bool, mas e %s",
+                (yyvsp[-3].sval), tipoParaString(dest->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if ((yyvsp[-2].tval) != TIPO_BOOL && (yyvsp[-2].tval) != TIPO_NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "and (G/B): operando 1 deve ser bool, mas e %s", tipoParaString((yyvsp[-2].tval)));
+            erro_semantico(msg, yylineno);
+        }
+        if ((yyvsp[-1].tval) != TIPO_BOOL && (yyvsp[-1].tval) != TIPO_NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "and (G/B): operando 2 deve ser bool, mas e %s", tipoParaString((yyvsp[-1].tval)));
+            erro_semantico(msg, yylineno);
+        }
+    }
+#line 1741 "yacc/translate.tab.c"
+    break;
+
+  case 47: /* op_binario: OP_OR ID operando operando FIM_LINHA  */
+#line 573 "yacc/translate.y"
+    {
+        Simbolo *dest = buscarSimbolo(tabelaAtual, (yyvsp[-3].sval));
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "or (Am/C): destino '%s' nao declarado", (yyvsp[-3].sval));
+            erro_semantico(msg, yylineno);
+        } else if (dest->tipo != TIPO_BOOL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "or (Am/C): destino '%s' deve ser bool, mas e %s",
+                (yyvsp[-3].sval), tipoParaString(dest->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if ((yyvsp[-2].tval) != TIPO_BOOL && (yyvsp[-2].tval) != TIPO_NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "or (Am/C): operando 1 deve ser bool, mas e %s", tipoParaString((yyvsp[-2].tval)));
+            erro_semantico(msg, yylineno);
+        }
+        if ((yyvsp[-1].tval) != TIPO_BOOL && (yyvsp[-1].tval) != TIPO_NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "or (Am/C): operando 2 deve ser bool, mas e %s", tipoParaString((yyvsp[-1].tval)));
+            erro_semantico(msg, yylineno);
+        }
+    }
+#line 1769 "yacc/translate.tab.c"
+    break;
+
+  case 48: /* op_binario: OP_EQ ID operando operando FIM_LINHA  */
+#line 599 "yacc/translate.y"
+    {
+        Simbolo *dest = buscarSimbolo(tabelaAtual, (yyvsp[-3].sval));
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "igual (C7/E): destino '%s' nao declarado", (yyvsp[-3].sval));
+            erro_semantico(msg, yylineno);
+        } else if (dest->tipo != TIPO_BOOL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "igual (C7/E): destino '%s' deve ser bool, mas e %s",
+                (yyvsp[-3].sval), tipoParaString(dest->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipos_comparaveis((yyvsp[-2].tval), (yyvsp[-1].tval))) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "igual (C7/E): operandos de tipos diferentes (%s vs %s)",
+                tipoParaString((yyvsp[-2].tval)), tipoParaString((yyvsp[-1].tval)));
+            erro_semantico(msg, yylineno);
+        }
+    }
+#line 1793 "yacc/translate.tab.c"
+    break;
+
+  case 49: /* op_binario: OP_NEQ ID operando operando FIM_LINHA  */
+#line 621 "yacc/translate.y"
+    {
+        Simbolo *dest = buscarSimbolo(tabelaAtual, (yyvsp[-3].sval));
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "diferente (Dm7/F#): destino '%s' nao declarado", (yyvsp[-3].sval));
+            erro_semantico(msg, yylineno);
+        } else if (dest->tipo != TIPO_BOOL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "diferente (Dm7/F#): destino '%s' deve ser bool, mas e %s",
+                (yyvsp[-3].sval), tipoParaString(dest->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipos_comparaveis((yyvsp[-2].tval), (yyvsp[-1].tval))) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "diferente (Dm7/F#): operandos de tipos diferentes (%s vs %s)",
+                tipoParaString((yyvsp[-2].tval)), tipoParaString((yyvsp[-1].tval)));
+            erro_semantico(msg, yylineno);
+        }
+    }
+#line 1817 "yacc/translate.tab.c"
+    break;
+
+  case 50: /* op_binario: OP_GT ID operando operando FIM_LINHA  */
+#line 643 "yacc/translate.y"
+    {
+        Simbolo *dest = buscarSimbolo(tabelaAtual, (yyvsp[-3].sval));
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "maior_que (E7/G): destino '%s' nao declarado", (yyvsp[-3].sval));
+            erro_semantico(msg, yylineno);
+        } else if (dest->tipo != TIPO_BOOL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "maior_que (E7/G): destino '%s' deve ser bool, mas e %s",
+                (yyvsp[-3].sval), tipoParaString(dest->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico((yyvsp[-2].tval))) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "maior_que (E7/G): operando 1 deve ser numerico, mas e %s", tipoParaString((yyvsp[-2].tval)));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico((yyvsp[-1].tval))) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "maior_que (E7/G): operando 2 deve ser numerico, mas e %s", tipoParaString((yyvsp[-1].tval)));
+            erro_semantico(msg, yylineno);
+        }
+    }
+#line 1845 "yacc/translate.tab.c"
+    break;
+
+  case 51: /* op_binario: OP_LT ID operando operando FIM_LINHA  */
+#line 669 "yacc/translate.y"
+    {
+        Simbolo *dest = buscarSimbolo(tabelaAtual, (yyvsp[-3].sval));
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "menor_que (F7/A): destino '%s' nao declarado", (yyvsp[-3].sval));
+            erro_semantico(msg, yylineno);
+        } else if (dest->tipo != TIPO_BOOL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "menor_que (F7/A): destino '%s' deve ser bool, mas e %s",
+                (yyvsp[-3].sval), tipoParaString(dest->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico((yyvsp[-2].tval))) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "menor_que (F7/A): operando 1 deve ser numerico, mas e %s", tipoParaString((yyvsp[-2].tval)));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico((yyvsp[-1].tval))) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "menor_que (F7/A): operando 2 deve ser numerico, mas e %s", tipoParaString((yyvsp[-1].tval)));
+            erro_semantico(msg, yylineno);
+        }
+    }
+#line 1873 "yacc/translate.tab.c"
+    break;
+
+  case 52: /* op_binario: OP_GTE ID operando operando FIM_LINHA  */
+#line 695 "yacc/translate.y"
+    {
+        Simbolo *dest = buscarSimbolo(tabelaAtual, (yyvsp[-3].sval));
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "maior_igual (G7/B): destino '%s' nao declarado", (yyvsp[-3].sval));
+            erro_semantico(msg, yylineno);
+        } else if (dest->tipo != TIPO_BOOL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "maior_igual (G7/B): destino '%s' deve ser bool, mas e %s",
+                (yyvsp[-3].sval), tipoParaString(dest->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico((yyvsp[-2].tval))) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "maior_igual (G7/B): operando 1 deve ser numerico, mas e %s", tipoParaString((yyvsp[-2].tval)));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico((yyvsp[-1].tval))) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "maior_igual (G7/B): operando 2 deve ser numerico, mas e %s", tipoParaString((yyvsp[-1].tval)));
+            erro_semantico(msg, yylineno);
+        }
+    }
+#line 1901 "yacc/translate.tab.c"
+    break;
+
+  case 53: /* op_binario: OP_LTE ID operando operando FIM_LINHA  */
+#line 721 "yacc/translate.y"
+    {
+        Simbolo *dest = buscarSimbolo(tabelaAtual, (yyvsp[-3].sval));
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "menor_igual (A7/C#): destino '%s' nao declarado", (yyvsp[-3].sval));
+            erro_semantico(msg, yylineno);
+        } else if (dest->tipo != TIPO_BOOL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "menor_igual (A7/C#): destino '%s' deve ser bool, mas e %s",
+                (yyvsp[-3].sval), tipoParaString(dest->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico((yyvsp[-2].tval))) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "menor_igual (A7/C#): operando 1 deve ser numerico, mas e %s", tipoParaString((yyvsp[-2].tval)));
+            erro_semantico(msg, yylineno);
+        }
+        if (!tipo_numerico((yyvsp[-1].tval))) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "menor_igual (A7/C#): operando 2 deve ser numerico, mas e %s", tipoParaString((yyvsp[-1].tval)));
+            erro_semantico(msg, yylineno);
+        }
+    }
+#line 1929 "yacc/translate.tab.c"
+    break;
+
+  case 54: /* op_unario: OP_NOT ID operando FIM_LINHA  */
+#line 751 "yacc/translate.y"
+    {
+        Simbolo *dest = buscarSimbolo(tabelaAtual, (yyvsp[-2].sval));
+        if (dest == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "not (Bm/D): destino '%s' nao declarado", (yyvsp[-2].sval));
+            erro_semantico(msg, yylineno);
+        } else if (dest->tipo != TIPO_BOOL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "not (Bm/D): destino '%s' deve ser bool, mas e %s",
+                (yyvsp[-2].sval), tipoParaString(dest->tipo));
+            erro_semantico(msg, yylineno);
+        }
+        if ((yyvsp[-1].tval) != TIPO_BOOL && (yyvsp[-1].tval) != TIPO_NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "not (Bm/D): operando deve ser bool, mas e %s", tipoParaString((yyvsp[-1].tval)));
+            erro_semantico(msg, yylineno);
+        }
+    }
+#line 1952 "yacc/translate.tab.c"
+    break;
+
+  case 55: /* operando: ID  */
+#line 777 "yacc/translate.y"
+    {
+        Simbolo *s = buscarSimbolo(tabelaAtual, (yyvsp[0].sval));
+        if (s == NULL) {
+            char msg[400]; snprintf(msg, sizeof(msg),
+                "variavel '%s' usada sem ter sido declarada", (yyvsp[0].sval));
+            erro_semantico(msg, yylineno);
+            (yyval.tval) = TIPO_NULL;
+        } else {
+            (yyval.tval) = s->tipo;
+        }
+    }
+#line 1968 "yacc/translate.tab.c"
+    break;
+
+  case 56: /* operando: LIT_INT  */
+#line 788 "yacc/translate.y"
+                   { (yyval.tval) = TIPO_INT;   }
+#line 1974 "yacc/translate.tab.c"
+    break;
+
+  case 57: /* operando: LIT_FLOAT  */
+#line 789 "yacc/translate.y"
+                   { (yyval.tval) = TIPO_FLOAT; }
+#line 1980 "yacc/translate.tab.c"
+    break;
+
+  case 58: /* operando: LIT_BOOL  */
+#line 790 "yacc/translate.y"
+                   { (yyval.tval) = TIPO_BOOL;  }
+#line 1986 "yacc/translate.tab.c"
+    break;
+
+  case 59: /* operando: NULL_LIT  */
+#line 791 "yacc/translate.y"
+                   { (yyval.tval) = TIPO_NULL;  }
+#line 1992 "yacc/translate.tab.c"
+    break;
+
+  case 60: /* operando: ACORDE_LIVRE  */
+#line 792 "yacc/translate.y"
+                   { (yyval.tval) = TIPO_NULL;  }
+#line 1998 "yacc/translate.tab.c"
     break;
 
 
-#line 1405 "yacc/translate.tab.c"
+#line 2002 "yacc/translate.tab.c"
 
       default: break;
     }
@@ -1594,142 +2191,5 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 303 "yacc/translate.y"
+#line 795 "yacc/translate.y"
 
-
-static Tipo tipo_de_texto(const char *tipo)
-{
-    if (strcmp(tipo, "int") == 0 || strcmp(tipo, "C/G") == 0) return TIPO_INT;
-    if (strcmp(tipo, "float") == 0 || strcmp(tipo, "Am/E") == 0) return TIPO_FLOAT;
-    if (strcmp(tipo, "bool") == 0 || strcmp(tipo, "Em/B") == 0) return TIPO_BOOL;
-    if (strcmp(tipo, "char") == 0 || strcmp(tipo, "F/C") == 0) return TIPO_CHAR;
-    if (strcmp(tipo, "null") == 0 || strcmp(tipo, "G/D") == 0) return TIPO_NULL;
-    if (strcmp(tipo, "lista") == 0 || strcmp(tipo, "C7") == 0) return TIPO_LISTA;
-    return TIPO_NULL;
-}
-
-static Categoria categoria_de_texto(const char *categoria)
-{
-    if (strcmp(categoria, "funcao") == 0) return CAT_FUNCAO;
-    if (strcmp(categoria, "parametro") == 0) return CAT_PARAMETRO;
-    return CAT_VARIAVEL;
-}
-
-static void inserir_simbolo(const char *nome, const char *tipo, const char *categoria, int linha)
-{
-    if (tabelaAtual == NULL)
-    {
-        return;
-    }
-
-    inserirSimbolo(
-        tabelaAtual,
-        criarSimbolo(
-            (char *)nome,
-            tipo_de_texto(tipo),
-            categoria_de_texto(categoria),
-            linha
-        )
-    );
-}
-
-void yyerror(const char *msg)
-{
-    (void)msg;
-    printf("Erro próximo a linha %d - Programa sintaticamente incorreto\n", yylineno);
-}
-
-// Função auxiliar para ignorar literais na hora de buscar na Tabela
-static int is_literal(const char *str) {
-    if (str[0] >= '0' && str[0] <= '9') return 1;
-    if (strcmp(str, "0") == 0 || strcmp(str, "1") == 0) return 1; // bools do lexer
-    return 0;
-}
-
-static void verificar_operacao_binaria(const char *dest_name, const char *op1_name, const char *op2_name, const char *operacao) 
-{
-    if (tabelaAtual == NULL) return;
-
-    // 1. Verifica Existência do Destino
-    Simbolo *dest = buscarSimbolo(tabelaAtual, (char*)dest_name);
-    if (dest == NULL) {
-        printf("Erro Semantico (Linha %d): Variavel de destino '%s' nao declarada.\n", yylineno, dest_name);
-        return; 
-    }
-
-    // 2. Verifica Existência do Operando 1 (se não for um número literal)
-    Simbolo *s_op1 = NULL;
-    if (!is_literal(op1_name)) {
-        s_op1 = buscarSimbolo(tabelaAtual, (char*)op1_name);
-        if (s_op1 == NULL) {
-            printf("Erro Semantico (Linha %d): Variavel '%s' nao declarada antes do uso.\n", yylineno, op1_name);
-        }
-    }
-
-    // 3. Verifica Existência do Operando 2 (se não for um número literal)
-    Simbolo *s_op2 = NULL;
-    if (!is_literal(op2_name)) {
-        s_op2 = buscarSimbolo(tabelaAtual, (char*)op2_name);
-        if (s_op2 == NULL) {
-            printf("Erro Semantico (Linha %d): Variavel '%s' nao declarada antes do uso.\n", yylineno, op2_name);
-        }
-    }
-
-    // =========================================================
-    // 4. VERIFICAÇÃO DE TIPOS
-    // =========================================================
-    
-    // A. OPERAÇÕES ARITMÉTICAS
-    if (strcmp(operacao, "soma") == 0 || strcmp(operacao, "subtracao") == 0 || 
-        strcmp(operacao, "multiplicacao") == 0 || strcmp(operacao, "divisao") == 0) 
-    {
-        if (dest->tipo != TIPO_INT && dest->tipo != TIPO_FLOAT) {
-            printf("Erro Semantico (Linha %d): Operacao de '%s' exige destino numerico (Encontrado: '%s').\n", 
-                   yylineno, operacao, dest_name);
-        }
-        
-        if (s_op1 != NULL && s_op1->tipo != TIPO_INT && s_op1->tipo != TIPO_FLOAT) {
-            printf("Erro Semantico (Linha %d): Operando '%s' invalido para conta matematica.\n", yylineno, op1_name);
-        }
-        if (s_op2 != NULL && s_op2->tipo != TIPO_INT && s_op2->tipo != TIPO_FLOAT) {
-            printf("Erro Semantico (Linha %d): Operando '%s' invalido para conta matematica.\n", yylineno, op2_name);
-        }
-    }
-    
-    // B. OPERAÇÕES LÓGICAS (AND, OR)
-    else if (strcmp(operacao, "and") == 0 || strcmp(operacao, "or") == 0) 
-    {
-        if (dest->tipo != TIPO_BOOL) {
-            printf("Erro Semantico (Linha %d): Operacao logica '%s' exige que o destino seja Booleano.\n", yylineno, operacao);
-        }
-        
-        if (s_op1 != NULL && s_op1->tipo != TIPO_BOOL) {
-            printf("Erro Semantico (Linha %d): Operando '%s' deve ser Booleano para a operacao '%s'.\n", yylineno, op1_name, operacao);
-        }
-        if (s_op2 != NULL && s_op2->tipo != TIPO_BOOL) {
-            printf("Erro Semantico (Linha %d): Operando '%s' deve ser Booleano para a operacao '%s'.\n", yylineno, op2_name, operacao);
-        }
-    }
-
-    // C. OPERAÇÕES RELACIONAIS (Maior, Menor, Igual, Diferente, etc.)
-    else if (strcmp(operacao, "igual") == 0 || strcmp(operacao, "diferente") == 0 || 
-             strcmp(operacao, "maior") == 0 || strcmp(operacao, "menor") == 0 || 
-             strcmp(operacao, "maior ou igual") == 0 || strcmp(operacao, "menor ou igual") == 0) 
-    {
-        // O destino obrigatoriamente precisa ser Bool para guardar o Verdadeiro ou Falso do teste
-        if (dest->tipo != TIPO_BOOL) {
-            printf("Erro Semantico (Linha %d): Operacao relacional '%s' exige destino Booleano (variavel '%s' nao e Bool).\n", 
-                   yylineno, operacao, dest_name);
-        }
-
-        // Operandos de grandeza (>, <, >=, <=) normalmente exigem valores numéricos para comparação
-        if (strcmp(operacao, "igual") != 0 && strcmp(operacao, "diferente") != 0) {
-            if (s_op1 != NULL && s_op1->tipo != TIPO_INT && s_op1->tipo != TIPO_FLOAT) {
-                printf("Erro Semantico (Linha %d): Operando '%s' deve ser numerico para a comparacao '%s'.\n", yylineno, op1_name, operacao);
-            }
-            if (s_op2 != NULL && s_op2->tipo != TIPO_INT && s_op2->tipo != TIPO_FLOAT) {
-                printf("Erro Semantico (Linha %d): Operando '%s' deve ser numerico para a comparacao '%s'.\n", yylineno, op2_name, operacao);
-            }
-        }
-    }
-}

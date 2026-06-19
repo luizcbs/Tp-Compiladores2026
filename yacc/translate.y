@@ -1,10 +1,4 @@
-/* 
- * Tokens NOVOS que o lexer (Topico 4) ainda precisa adicionar:
- *   CALL       ("A/C#" — distinto de "A7/C#" que e OP_LTE)
- *   NULL_LIT   ("G/D" — agora literal, nao mais parte de TIPO)
- *   '['  ']'   (delimitadores de tamanho do vetor)
- *   TIPO não deve mais reconhecer "G/D" nem "F/C" (null e char saem do tipo)
- */
+
 
 %code requires {
     #include "TabelaSimbolo.h"
@@ -168,7 +162,7 @@ var_decl
     {
         Tipo t_decl = tipo_de_texto($1);
         if ($5 != TIPO_NULL && $5 != t_decl) {
-            char msg[400];
+            char msg[512];
             snprintf(msg, sizeof(msg),
                 "variavel '%s': valor inicial incompativel com tipo declarado", $3);
             erro_semantico(msg, yylineno);
@@ -184,12 +178,12 @@ var_decl
     | TIPO TIPO ID END_BLOCO '[' LIT_INT ']' FIM_LINHA
     {
         if (strcmp($1, "C7") != 0) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "vetor '%s': tipo composto esperado e C7 (lista)", $3);
             erro_semantico(msg, yylineno);
         }
         if ($6 <= 0) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "vetor '%s': tamanho deve ser > 0 (recebeu %d)", $3, $6);
             erro_semantico(msg, yylineno);
         }
@@ -258,11 +252,11 @@ if_stmt
     {
         Simbolo *s = buscarSimbolo(tabelaAtual, $3);
         if (s == NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "IF: nota guia '%s' nao declarada", $3);
             erro_semantico(msg, yylineno);
         } else if (s->tipo != TIPO_BOOL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "IF: nota guia '%s' deve ser bool, mas e %s",
                 $3, tipoParaString(s->tipo));
             erro_semantico(msg, yylineno);
@@ -274,11 +268,11 @@ if_stmt
     {
         Simbolo *s = buscarSimbolo(tabelaAtual, $3);
         if (s == NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "IF/ELSE: nota guia '%s' nao declarada", $3);
             erro_semantico(msg, yylineno);
         } else if (s->tipo != TIPO_BOOL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "IF/ELSE: nota guia '%s' deve ser bool, mas e %s",
                 $3, tipoParaString(s->tipo));
             erro_semantico(msg, yylineno);
@@ -294,11 +288,11 @@ while_stmt
     {
         Simbolo *s = buscarSimbolo(tabelaAtual, $3);
         if (s == NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "WHILE: nota guia '%s' nao declarada", $3);
             erro_semantico(msg, yylineno);
         } else if (s->tipo != TIPO_BOOL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "WHILE: nota guia '%s' deve ser bool, mas e %s",
                 $3, tipoParaString(s->tipo));
             erro_semantico(msg, yylineno);
@@ -315,7 +309,7 @@ return_stmt
         if (nome_funcao_atual[0] == '\0') {
             erro_semantico("return (Am) usado fora de uma funcao", yylineno);
         } else if ($2 != TIPO_NULL && $2 != tipo_retorno_atual) {
-            char msg[400];
+            char msg[512];
             snprintf(msg, sizeof(msg),
                 "return em '%s': tipo retornado (%s) incompativel com retorno declarado (%s)",
                 nome_funcao_atual, tipoParaString($2), tipoParaString(tipo_retorno_atual));
@@ -338,21 +332,21 @@ read_list_stmt
         Simbolo *lista = buscarSimbolo(tabelaAtual, $3);
 
         if (dest == NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "ReadList: destino '%s' nao declarado", $2);
             erro_semantico(msg, yylineno);
         }
         if (lista == NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "ReadList: '%s' nao declarado", $3);
             erro_semantico(msg, yylineno);
         } else if (lista->tipo != TIPO_LISTA) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "ReadList: '%s' nao e uma lista (e %s)", $3, tipoParaString(lista->tipo));
             erro_semantico(msg, yylineno);
         }
         if ($4 != TIPO_INT) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "ReadList: indice deve ser int, mas e %s", tipoParaString($4));
             erro_semantico(msg, yylineno);
         }
@@ -369,16 +363,16 @@ write_list_stmt
         Simbolo *lista = buscarSimbolo(tabelaAtual, $2);
 
         if (lista == NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "WriteList: '%s' nao declarado", $2);
             erro_semantico(msg, yylineno);
         } else if (lista->tipo != TIPO_LISTA) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "WriteList: '%s' nao e uma lista (e %s)", $2, tipoParaString(lista->tipo));
             erro_semantico(msg, yylineno);
         }
         if ($3 != TIPO_INT) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "WriteList: indice deve ser int, mas e %s", tipoParaString($3));
             erro_semantico(msg, yylineno);
         }
@@ -396,23 +390,23 @@ func_call_stmt
         AssinaturaFuncao *sig  = buscar_assinatura($3);
 
         if (dest == NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "CALL: destino '%s' nao declarado", $2);
             erro_semantico(msg, yylineno);
         }
         if (sig == NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "CALL: funcao '%s' nao declarada (declare antes de chamar)", $3);
             erro_semantico(msg, yylineno);
         } else {
             if (contagem_args_atual != sig->num_params) {
-                char msg[400]; snprintf(msg, sizeof(msg),
+                char msg[512]; snprintf(msg, sizeof(msg),
                     "CALL '%s': esperava %d argumento(s), recebeu %d",
                     $3, sig->num_params, contagem_args_atual);
                 erro_semantico(msg, yylineno);
             }
             if (dest != NULL && dest->tipo != sig->retorno) {
-                char msg[400]; snprintf(msg, sizeof(msg),
+                char msg[512]; snprintf(msg, sizeof(msg),
                     "CALL '%s': retorno (%s) incompativel com destino '%s' (%s)",
                     $3, tipoParaString(sig->retorno), $2, tipoParaString(dest->tipo));
                 erro_semantico(msg, yylineno);
@@ -441,23 +435,23 @@ op_binario
             ($3 == TIPO_NULL || $4 == TIPO_NULL);
 
         if (dest == NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "soma (C/E): destino '%s' nao declarado", $2);
             erro_semantico(msg, yylineno);
         } else if (!tipo_numerico(dest->tipo) && !eh_atribuicao_null_em_lista) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "soma (C/E): destino '%s' deve ser numerico, mas e %s",
                 $2, tipoParaString(dest->tipo));
             erro_semantico(msg, yylineno);
         }
         if (!eh_atribuicao_null_em_lista) {
             if (!tipo_numerico($3) && $3 != TIPO_NULL) {
-                char msg[400]; snprintf(msg, sizeof(msg),
+                char msg[512]; snprintf(msg, sizeof(msg),
                     "soma (C/E): operando 1 deve ser numerico, mas e %s", tipoParaString($3));
                 erro_semantico(msg, yylineno);
             }
             if (!tipo_numerico($4) && $4 != TIPO_NULL) {
-                char msg[400]; snprintf(msg, sizeof(msg),
+                char msg[512]; snprintf(msg, sizeof(msg),
                     "soma (C/E): operando 2 deve ser numerico, mas e %s", tipoParaString($4));
                 erro_semantico(msg, yylineno);
             }
@@ -469,22 +463,22 @@ op_binario
     {
         Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
         if (dest == NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "subtracao (Dm/F#): destino '%s' nao declarado", $2);
             erro_semantico(msg, yylineno);
         } else if (!tipo_numerico(dest->tipo)) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "subtracao (Dm/F#): destino '%s' deve ser numerico, mas e %s",
                 $2, tipoParaString(dest->tipo));
             erro_semantico(msg, yylineno);
         }
         if (!tipo_numerico($3) && $3 != TIPO_NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "subtracao (Dm/F#): operando 1 deve ser numerico, mas e %s", tipoParaString($3));
             erro_semantico(msg, yylineno);
         }
         if (!tipo_numerico($4) && $4 != TIPO_NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "subtracao (Dm/F#): operando 2 deve ser numerico, mas e %s", tipoParaString($4));
             erro_semantico(msg, yylineno);
         }
@@ -495,22 +489,22 @@ op_binario
     {
         Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
         if (dest == NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "multiplicacao (E/G): destino '%s' nao declarado", $2);
             erro_semantico(msg, yylineno);
         } else if (!tipo_numerico(dest->tipo)) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "multiplicacao (E/G): destino '%s' deve ser numerico, mas e %s",
                 $2, tipoParaString(dest->tipo));
             erro_semantico(msg, yylineno);
         }
         if (!tipo_numerico($3) && $3 != TIPO_NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "multiplicacao (E/G): operando 1 deve ser numerico, mas e %s", tipoParaString($3));
             erro_semantico(msg, yylineno);
         }
         if (!tipo_numerico($4) && $4 != TIPO_NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "multiplicacao (E/G): operando 2 deve ser numerico, mas e %s", tipoParaString($4));
             erro_semantico(msg, yylineno);
         }
@@ -521,22 +515,22 @@ op_binario
     {
         Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
         if (dest == NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "divisao (F/A): destino '%s' nao declarado", $2);
             erro_semantico(msg, yylineno);
         } else if (!tipo_numerico(dest->tipo)) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "divisao (F/A): destino '%s' deve ser numerico, mas e %s",
                 $2, tipoParaString(dest->tipo));
             erro_semantico(msg, yylineno);
         }
         if (!tipo_numerico($3) && $3 != TIPO_NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "divisao (F/A): operando 1 deve ser numerico, mas e %s", tipoParaString($3));
             erro_semantico(msg, yylineno);
         }
         if (!tipo_numerico($4) && $4 != TIPO_NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "divisao (F/A): operando 2 deve ser numerico, mas e %s", tipoParaString($4));
             erro_semantico(msg, yylineno);
         }
@@ -547,22 +541,22 @@ op_binario
     {
         Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
         if (dest == NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "and (G/B): destino '%s' nao declarado", $2);
             erro_semantico(msg, yylineno);
         } else if (dest->tipo != TIPO_BOOL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "and (G/B): destino '%s' deve ser bool, mas e %s",
                 $2, tipoParaString(dest->tipo));
             erro_semantico(msg, yylineno);
         }
         if ($3 != TIPO_BOOL && $3 != TIPO_NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "and (G/B): operando 1 deve ser bool, mas e %s", tipoParaString($3));
             erro_semantico(msg, yylineno);
         }
         if ($4 != TIPO_BOOL && $4 != TIPO_NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "and (G/B): operando 2 deve ser bool, mas e %s", tipoParaString($4));
             erro_semantico(msg, yylineno);
         }
@@ -573,22 +567,22 @@ op_binario
     {
         Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
         if (dest == NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "or (Am/C): destino '%s' nao declarado", $2);
             erro_semantico(msg, yylineno);
         } else if (dest->tipo != TIPO_BOOL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "or (Am/C): destino '%s' deve ser bool, mas e %s",
                 $2, tipoParaString(dest->tipo));
             erro_semantico(msg, yylineno);
         }
         if ($3 != TIPO_BOOL && $3 != TIPO_NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "or (Am/C): operando 1 deve ser bool, mas e %s", tipoParaString($3));
             erro_semantico(msg, yylineno);
         }
         if ($4 != TIPO_BOOL && $4 != TIPO_NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "or (Am/C): operando 2 deve ser bool, mas e %s", tipoParaString($4));
             erro_semantico(msg, yylineno);
         }
@@ -599,17 +593,17 @@ op_binario
     {
         Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
         if (dest == NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "igual (C7/E): destino '%s' nao declarado", $2);
             erro_semantico(msg, yylineno);
         } else if (dest->tipo != TIPO_BOOL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "igual (C7/E): destino '%s' deve ser bool, mas e %s",
                 $2, tipoParaString(dest->tipo));
             erro_semantico(msg, yylineno);
         }
         if (!tipos_comparaveis($3, $4)) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "igual (C7/E): operandos de tipos diferentes (%s vs %s)",
                 tipoParaString($3), tipoParaString($4));
             erro_semantico(msg, yylineno);
@@ -621,17 +615,17 @@ op_binario
     {
         Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
         if (dest == NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "diferente (Dm7/F#): destino '%s' nao declarado", $2);
             erro_semantico(msg, yylineno);
         } else if (dest->tipo != TIPO_BOOL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "diferente (Dm7/F#): destino '%s' deve ser bool, mas e %s",
                 $2, tipoParaString(dest->tipo));
             erro_semantico(msg, yylineno);
         }
         if (!tipos_comparaveis($3, $4)) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "diferente (Dm7/F#): operandos de tipos diferentes (%s vs %s)",
                 tipoParaString($3), tipoParaString($4));
             erro_semantico(msg, yylineno);
@@ -643,22 +637,22 @@ op_binario
     {
         Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
         if (dest == NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "maior_que (E7/G): destino '%s' nao declarado", $2);
             erro_semantico(msg, yylineno);
         } else if (dest->tipo != TIPO_BOOL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "maior_que (E7/G): destino '%s' deve ser bool, mas e %s",
                 $2, tipoParaString(dest->tipo));
             erro_semantico(msg, yylineno);
         }
         if (!tipo_numerico($3)) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "maior_que (E7/G): operando 1 deve ser numerico, mas e %s", tipoParaString($3));
             erro_semantico(msg, yylineno);
         }
         if (!tipo_numerico($4)) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "maior_que (E7/G): operando 2 deve ser numerico, mas e %s", tipoParaString($4));
             erro_semantico(msg, yylineno);
         }
@@ -669,22 +663,22 @@ op_binario
     {
         Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
         if (dest == NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "menor_que (F7/A): destino '%s' nao declarado", $2);
             erro_semantico(msg, yylineno);
         } else if (dest->tipo != TIPO_BOOL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "menor_que (F7/A): destino '%s' deve ser bool, mas e %s",
                 $2, tipoParaString(dest->tipo));
             erro_semantico(msg, yylineno);
         }
         if (!tipo_numerico($3)) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "menor_que (F7/A): operando 1 deve ser numerico, mas e %s", tipoParaString($3));
             erro_semantico(msg, yylineno);
         }
         if (!tipo_numerico($4)) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "menor_que (F7/A): operando 2 deve ser numerico, mas e %s", tipoParaString($4));
             erro_semantico(msg, yylineno);
         }
@@ -695,22 +689,22 @@ op_binario
     {
         Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
         if (dest == NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "maior_igual (G7/B): destino '%s' nao declarado", $2);
             erro_semantico(msg, yylineno);
         } else if (dest->tipo != TIPO_BOOL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "maior_igual (G7/B): destino '%s' deve ser bool, mas e %s",
                 $2, tipoParaString(dest->tipo));
             erro_semantico(msg, yylineno);
         }
         if (!tipo_numerico($3)) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "maior_igual (G7/B): operando 1 deve ser numerico, mas e %s", tipoParaString($3));
             erro_semantico(msg, yylineno);
         }
         if (!tipo_numerico($4)) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "maior_igual (G7/B): operando 2 deve ser numerico, mas e %s", tipoParaString($4));
             erro_semantico(msg, yylineno);
         }
@@ -721,22 +715,22 @@ op_binario
     {
         Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
         if (dest == NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "menor_igual (A7/C#): destino '%s' nao declarado", $2);
             erro_semantico(msg, yylineno);
         } else if (dest->tipo != TIPO_BOOL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "menor_igual (A7/C#): destino '%s' deve ser bool, mas e %s",
                 $2, tipoParaString(dest->tipo));
             erro_semantico(msg, yylineno);
         }
         if (!tipo_numerico($3)) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "menor_igual (A7/C#): operando 1 deve ser numerico, mas e %s", tipoParaString($3));
             erro_semantico(msg, yylineno);
         }
         if (!tipo_numerico($4)) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "menor_igual (A7/C#): operando 2 deve ser numerico, mas e %s", tipoParaString($4));
             erro_semantico(msg, yylineno);
         }
@@ -751,17 +745,17 @@ op_unario
     {
         Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
         if (dest == NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "not (Bm/D): destino '%s' nao declarado", $2);
             erro_semantico(msg, yylineno);
         } else if (dest->tipo != TIPO_BOOL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "not (Bm/D): destino '%s' deve ser bool, mas e %s",
                 $2, tipoParaString(dest->tipo));
             erro_semantico(msg, yylineno);
         }
         if ($3 != TIPO_BOOL && $3 != TIPO_NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "not (Bm/D): operando deve ser bool, mas e %s", tipoParaString($3));
             erro_semantico(msg, yylineno);
         }
@@ -777,7 +771,7 @@ operando
     {
         Simbolo *s = buscarSimbolo(tabelaAtual, $1);
         if (s == NULL) {
-            char msg[400]; snprintf(msg, sizeof(msg),
+            char msg[512]; snprintf(msg, sizeof(msg),
                 "variavel '%s' usada sem ter sido declarada", $1);
             erro_semantico(msg, yylineno);
             $$ = TIPO_NULL;

@@ -44,6 +44,12 @@
 #if YYDEBUG
 extern int yydebug;
 #endif
+/* "%code requires" blocks.  */
+#line 9 "yacc/translate.y"
+
+    #include "TabelaSimbolo.h"
+
+#line 53 "yacc/translate.tab.h"
 
 /* Token kinds.  */
 #ifndef YYTOKENTYPE
@@ -58,37 +64,36 @@ extern int yydebug;
     TIPO = 259,                    /* TIPO  */
     VAR = 260,                     /* VAR  */
     FUNC = 261,                    /* FUNC  */
-    IF = 262,                      /* IF  */
-    ELSE = 263,                    /* ELSE  */
-    WHILE = 264,                   /* WHILE  */
-    KW_RETURN = 265,               /* KW_RETURN  */
-    KW_BREAK = 266,                /* KW_BREAK  */
-    KW_CONTINUE = 267,             /* KW_CONTINUE  */
-    BLOCO_INI = 268,               /* BLOCO_INI  */
-    END_BLOCO = 269,               /* END_BLOCO  */
-    READ_LIST = 270,               /* READ_LIST  */
-    WRITE_LIST = 271,              /* WRITE_LIST  */
-    OP_ADD = 272,                  /* OP_ADD  */
-    OP_SUB = 273,                  /* OP_SUB  */
-    OP_MUL = 274,                  /* OP_MUL  */
-    OP_DIV = 275,                  /* OP_DIV  */
-    OP_AND = 276,                  /* OP_AND  */
-    OP_OR = 277,                   /* OP_OR  */
-    OP_NOT = 278,                  /* OP_NOT  */
-    OP_EQ = 279,                   /* OP_EQ  */
-    OP_NEQ = 280,                  /* OP_NEQ  */
-    OP_GT = 281,                   /* OP_GT  */
-    OP_LT = 282,                   /* OP_LT  */
-    OP_GTE = 283,                  /* OP_GTE  */
-    OP_LTE = 284,                  /* OP_LTE  */
-    LIT_INT = 285,                 /* LIT_INT  */
-    LIT_FLOAT = 286,               /* LIT_FLOAT  */
-    LIT_CHAR = 287,                /* LIT_CHAR  */
-    LIT_STRING = 288,              /* LIT_STRING  */
-    LIT_BOOL = 289,                /* LIT_BOOL  */
-    ID = 290,                      /* ID  */
-    ACORDE_LIVRE = 291,            /* ACORDE_LIVRE  */
-    DECL_SEM_INICIALIZACAO = 292   /* DECL_SEM_INICIALIZACAO  */
+    CALL = 262,                    /* CALL  */
+    IF = 263,                      /* IF  */
+    ELSE = 264,                    /* ELSE  */
+    WHILE = 265,                   /* WHILE  */
+    KW_RETURN = 266,               /* KW_RETURN  */
+    KW_BREAK = 267,                /* KW_BREAK  */
+    KW_CONTINUE = 268,             /* KW_CONTINUE  */
+    BLOCO_INI = 269,               /* BLOCO_INI  */
+    END_BLOCO = 270,               /* END_BLOCO  */
+    READ_LIST = 271,               /* READ_LIST  */
+    WRITE_LIST = 272,              /* WRITE_LIST  */
+    OP_ADD = 273,                  /* OP_ADD  */
+    OP_SUB = 274,                  /* OP_SUB  */
+    OP_MUL = 275,                  /* OP_MUL  */
+    OP_DIV = 276,                  /* OP_DIV  */
+    OP_AND = 277,                  /* OP_AND  */
+    OP_OR = 278,                   /* OP_OR  */
+    OP_NOT = 279,                  /* OP_NOT  */
+    OP_EQ = 280,                   /* OP_EQ  */
+    OP_NEQ = 281,                  /* OP_NEQ  */
+    OP_GT = 282,                   /* OP_GT  */
+    OP_LT = 283,                   /* OP_LT  */
+    OP_GTE = 284,                  /* OP_GTE  */
+    OP_LTE = 285,                  /* OP_LTE  */
+    LIT_INT = 286,                 /* LIT_INT  */
+    LIT_FLOAT = 287,               /* LIT_FLOAT  */
+    LIT_BOOL = 288,                /* LIT_BOOL  */
+    ID = 289,                      /* ID  */
+    ACORDE_LIVRE = 290,            /* ACORDE_LIVRE  */
+    NULL_LIT = 291                 /* NULL_LIT  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
@@ -97,13 +102,14 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 48 "yacc/translate.y"
+#line 122 "yacc/translate.y"
 
     int    ival;
     double fval;
     char   sval[256];
+    Tipo   tval;
 
-#line 107 "yacc/translate.tab.h"
+#line 113 "yacc/translate.tab.h"
 
 };
 typedef union YYSTYPE YYSTYPE;

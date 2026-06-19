@@ -1,6 +1,6 @@
-#line 2 "lex/lex.yy.c"
+#line 1 "lex/lex.yy.c"
 
-#line 4 "lex/lex.yy.c"
+#line 3 "lex/lex.yy.c"
 
 #define  YY_INT_ALIGNED short int
 
@@ -608,11 +608,11 @@ char *yytext;
 #include <stdlib.h>
 #include "../yacc/translate.tab.h"
 
-#line 612 "lex/lex.yy.c"
+#line 611 "lex/lex.yy.c"
 /* Literais */
 /* Tipos */
 /* Acordes */
-#line 616 "lex/lex.yy.c"
+#line 615 "lex/lex.yy.c"
 
 #define INITIAL 0
 
@@ -832,7 +832,7 @@ YY_DECL
 #line 59 "lex/soundy.l"
 
 
-#line 836 "lex/lex.yy.c"
+#line 835 "lex/lex.yy.c"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -1091,7 +1091,7 @@ YY_RULE_SETUP
 #line 115 "lex/soundy.l"
 ECHO;
 	YY_BREAK
-#line 1095 "lex/lex.yy.c"
+#line 1094 "lex/lex.yy.c"
 case YY_STATE_EOF(INITIAL):
 	yyterminate();
 
