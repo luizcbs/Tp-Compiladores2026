@@ -14,11 +14,12 @@ MAIN_C   = tabela_simbolos/main.c
 
 GCI_C = gci/gci.c
 
-TESTES   = testes/teste_funcao.sndy \
-           testes/teste_if_else.sndy \
-           testes/teste_lista.sndy \
-           testes/teste_while.sndy \
-           testes/teste_incorreto.sndy
+TESTES   = testes/teste_funcao_musical.sndy \
+           testes/teste_if_else_musical.sndy \
+           testes/teste_lista_musical.sndy \
+           testes/teste_while_musical.sndy \
+           testes/teste_incorreto_musical.sndy \
+           testes/teste_semantico.sndy
 
 # -------------------------------------------------------------------
 

@@ -11,6 +11,7 @@
 
 extern int yylineno;
 extern TabelaSimbolo *tabelaAtual;
+extern int houve_erro_semantico;
 int  yylex(void);
 void yyerror(const char *msg);
 
@@ -229,6 +230,7 @@ op_binario
     : OP_ADD ID operando operando FIM_LINHA
         {
             Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
+            int atribuicao_null_para_lista;
             if (dest == NULL)
             {
                 char msg[256];
@@ -241,6 +243,20 @@ op_binario
                 snprintf(msg, sizeof(msg), "ADD: destino '%s' com tipo invalido", $2);
                 erro_semantico(msg, yylineno);
             }
+
+            atribuicao_null_para_lista =
+                dest != NULL &&
+                dest->tipo == TIPO_LISTA &&
+                ($3.tipo == TIPO_NULL || $4.tipo == TIPO_NULL);
+
+            if (!atribuicao_null_para_lista)
+            {
+                if ($3.tipo != TIPO_INVALIDO && !tipo_numerico($3.tipo) && $3.tipo != TIPO_NULL)
+                    erro_semantico("ADD: operando 1 deve ser numerico", yylineno);
+                if ($4.tipo != TIPO_INVALIDO && !tipo_numerico($4.tipo) && $4.tipo != TIPO_NULL)
+                    erro_semantico("ADD: operando 2 deve ser numerico", yylineno);
+            }
+
             gci_emitir_operacao_otimizada("ADD", $2, $3.texto, $4.texto);
         }
     | OP_SUB ID operando operando FIM_LINHA
@@ -705,6 +721,7 @@ write_list_stmt
 
 static void erro_semantico(const char *msg, int linha)
 {
+    houve_erro_semantico = 1;
     fprintf(stderr, "Erro semantico na linha %d: %s\n", linha, msg);
 }
 
