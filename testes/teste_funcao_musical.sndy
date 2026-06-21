@@ -1,0 +1,17 @@
+// Declaração da função 'soma' (C/G Bm/F# soma) com parâmetros 'a' e 'b'
+C/G Bm/F# G G F#m C/G A A F#m C/G E E F#m C
+    // C/G Dm/A resultado Cm B C
+    C/G Dm/A D D F#m Cm B C
+    
+    // C/E resultado a b B C
+    C/E D D F#m A A F#m E E F#m B C
+    
+    // Am resultado B C (Retorno)
+    Am D D F#m B C
+Cm
+
+// C/G Dm/A principal Cm B C
+C/G Dm/A A G F#m Cm B C
+
+// A/C# principal soma 10 20 B C
+A/C# A G F#m G G F#m Emaj7 Emaj7 G#m Dmaj7 Dmaj7 Cmaj7 G#m B C

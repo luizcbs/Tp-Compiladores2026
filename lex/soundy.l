@@ -17,21 +17,17 @@ newline     \n
 comment     "//"[^\n]*
 
 /* Literais */
-float_lit   [0-9]+"."[0-9]+
-int_lit     [0-9]+
-char_lit    '.'
-string_lit  \"[^\"]*\"
+null        "G/D"
 
-id          [A-Za-z][A-Za-z0-9_]*
+/* Alfabeto Quaternário Musical (Base 4) e Identificadores */
+letra_var   ("G"|"D"|"A"|"E")
+letra_num   ("Cmaj7"|"Dmaj7"|"Emaj7"|"Fmaj7")
 
 /* Tipos */
 int         "C/G"
 float       "Am/E"
 bool        "Em/B"
-char        "F/C"
-null        "G/D"
-lista       "C7"
-tipo        ({int}|{float}|{bool}|{char}|{null}|{lista})
+tipo        ({int}|{float}|{bool})
 
 /* Acordes */
 cifra       [A-G]
@@ -64,6 +60,7 @@ chord       {cifra}{alter}?{chord_body}?{bass}?
 
 "B"[ \t]+"C"    { return FIM_LINHA; }
 
+"C7"            { strncpy(yylval.sval, yytext, 255); return KW_LISTA; }
 {tipo}          { strncpy(yylval.sval, yytext, 255); return TIPO; }
 
 "C/E"           { return OP_ADD; }
@@ -84,6 +81,7 @@ chord       {cifra}{alter}?{chord_body}?{bass}?
 
 "Dm/A"          { return VAR; }
 "Bm/F#"         { return FUNC; }
+"A/C#"          { return CALL; }
 
 "C7maj"         { return READ_LIST; }
 "Cm7"           { return WRITE_LIST; }
@@ -101,14 +99,84 @@ chord       {cifra}{alter}?{chord_body}?{bass}?
 "true"          { yylval.ival = 1; return LIT_BOOL; }
 "false"         { yylval.ival = 0; return LIT_BOOL; }
 
-{float_lit}     { yylval.fval = atof(yytext); return LIT_FLOAT; }
-{int_lit}       { yylval.ival = atoi(yytext); return LIT_INT; }
-{char_lit}      { strncpy(yylval.sval, yytext, 255); return LIT_CHAR; }
-{string_lit}    { strncpy(yylval.sval, yytext, 255); return LIT_STRING; }
+{null}          { return LIT_NULL; }
+
+
+({letra_var}[ \t\n]*)+"F#m" { 
+                /* 1. Remove espacos e o terminador F#m para salvar um nome limpo */
+                char clean_name[256] = "";
+                int j = 0;
+                for(int i = 0; yytext[i] != '\0'; i++) {
+                    if(yytext[i] != ' ' && yytext[i] != '\t' && yytext[i] != '\n') {
+                        clean_name[j++] = yytext[i];
+                    }
+                }
+                clean_name[j] = '\0';
+                
+                /* Remove os 3 caracteres do final ("F#m") */
+                if (j >= 3) clean_name[j-3] = '\0'; 
+                
+                strncpy(yylval.sval, clean_name, 255);
+                return ID; 
+            }
+
+({letra_num}[ \t\n]*)+"Bdim"[ \t\n]*({letra_num}[ \t\n]*)+"G#m" { 
+                /* Processa floats em Base 4: parte_inteira Bdim parte_fracionaria G#m */
+                double val = 0.0;
+                double divisor = 4.0;
+                int is_fraction = 0;
+                char *p = yytext;
+
+                while(*p != '\0') {
+                    if(*p == ' ' || *p == '\t' || *p == '\n') { p++; continue; }
+                    if(strncmp(p, "G#m", 3) == 0) break;
+                    
+                    /* Se encontrou a vírgula, ativa o modo fracionário */
+                    if(strncmp(p, "Bdim", 4) == 0) { 
+                        is_fraction = 1; 
+                        p += 4; 
+                        continue; 
+                    }
+                    
+                    int digit = -1;
+                    if(strncmp(p, "Cmaj7", 5) == 0)      { digit = 0; p += 5; }
+                    else if(strncmp(p, "Dmaj7", 5) == 0) { digit = 1; p += 5; }
+                    else if(strncmp(p, "Emaj7", 5) == 0) { digit = 2; p += 5; }
+                    else if(strncmp(p, "Fmaj7", 5) == 0) { digit = 3; p += 5; }
+                    else { p++; continue; }
+
+                    if (!is_fraction) {
+                        /* Antes do Bdim: constrói a parte inteira (val * 4 + digito) */
+                        val = val * 4.0 + digit;
+                    } else {
+                        /* Depois do Bdim: constrói a parte fracionária (digito / divisor) */
+                        val = val + ((double)digit / divisor);
+                        divisor *= 4.0; /* Próxima casa decimal será dividida por 16, depois 64... */
+                    }
+                }
+                yylval.fval = val;
+                return LIT_FLOAT; 
+            }
+
+({letra_num}[ \t\n]*)+"G#m" { 
+                /* 2. Processa os acordes em Base 4 e converte para decimal */
+                int val = 0;
+                char *p = yytext;
+                while(*p != '\0') {
+                    if(*p == ' ' || *p == '\t' || *p == '\n') { p++; continue; }
+                    if(strncmp(p, "G#m", 3) == 0) break;
+                    
+                    if(strncmp(p, "Cmaj7", 5) == 0)      { val = val * 4 + 0; p += 5; }
+                    else if(strncmp(p, "Dmaj7", 5) == 0) { val = val * 4 + 1; p += 5; }
+                    else if(strncmp(p, "Emaj7", 5) == 0) { val = val * 4 + 2; p += 5; }
+                    else if(strncmp(p, "Fmaj7", 5) == 0) { val = val * 4 + 3; p += 5; }
+                    else { p++; }
+                }
+                yylval.ival = val;
+                return LIT_INT; 
+            }
 
 {chord}         { strncpy(yylval.sval, yytext, 255); return ACORDE_LIVRE; }
-
-{id}            { strncpy(yylval.sval, yytext, 255); return ID; }
 
 .               { fprintf(stderr, "Erro lexico na linha %d: caractere desconhecido '%s'\n", yylineno, yytext); }
 

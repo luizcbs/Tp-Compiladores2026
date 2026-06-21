@@ -45,7 +45,7 @@ void adicionarFilho(TabelaSimbolo *pai, TabelaSimbolo *filho)
     filho->pai = pai;
 }
 
-Simbolo criarSimbolo(char *nome, Tipo tipo, Categoria categoria, int linha)
+Simbolo criarSimbolo(char *nome, Tipo tipo, Categoria categoria, int linha, int tamanhoLista)
 {
     Simbolo s;
 
@@ -54,6 +54,7 @@ Simbolo criarSimbolo(char *nome, Tipo tipo, Categoria categoria, int linha)
     s.tipo = tipo;
     s.categoria = categoria;
     s.linhaDeclaracao = linha;
+    s.tamanhoLista = tamanhoLista;
 
     return s;
 }
@@ -133,9 +134,8 @@ char *tipoParaString(Tipo tipo)
         case TIPO_INT:   return "Int";
         case TIPO_FLOAT: return "Float";
         case TIPO_BOOL:  return "Bool";
-        case TIPO_CHAR:  return "Char";
-        case TIPO_NULL:  return "Null";
         case TIPO_LISTA: return "Lista";
+        case TIPO_INVALIDO:  return "Invalido";
         default:         return "Desconhecido";
     }
 }

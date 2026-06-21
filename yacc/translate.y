@@ -49,6 +49,8 @@ extern TabelaSimbolo *tabelaAtual;
 
 %type <sval> operando
 
+%nonassoc ID LIT_INT LIT_FLOAT LIT_BOOL ACORDE_LIVRE
+
 %%
 
 program
