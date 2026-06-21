@@ -12,6 +12,7 @@ typedef enum {
     TIPO_INT,
     TIPO_FLOAT,
     TIPO_BOOL,
+    TIPO_NULL,
     TIPO_LISTA,
     TIPO_INVALIDO
 } Tipo;
@@ -54,6 +55,7 @@ Simbolo criarSimbolo(char *nome, Tipo tipo, Categoria categoria, int linha, int 
 int inserirSimbolo(TabelaSimbolo *tabela, Simbolo simbolo);
 
 Simbolo *buscarNaTabelaSimboloAtual(TabelaSimbolo *tabela, char *nome);
+Simbolo *buscarSimbolo(TabelaSimbolo *tabelaAtual, char *nome);
 
 void entrarTabalaSimbolo(TabelaSimbolo **tabelaAtual,TabelaSimbolo *novaTabela);
 void sairTabelaSimbolo(TabelaSimbolo **tabelaAtual);
