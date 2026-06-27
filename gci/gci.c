@@ -2,12 +2,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/stat.h>
 #include "gci.h"
 
 #define MAX_IR 1000
 #define MAX_ARGS_CALL 16
 #define MAX_ASM_SIMBOLOS 256
 #define MAX_NOME_ASM 80
+#define ASM_DIR "saida_asm"
 
 typedef struct {
     char op[32];
@@ -569,17 +571,32 @@ void gci_emitir_write_list(const char* lista,
  * TP4 — GERAÇÃO DE ASSEMBLY MOS6502
  * ================================================================ */
 
-static void caminho_saida_asm(const char* fonte, char* saida, size_t tam)
+static int caminho_saida_asm(const char* fonte, char* saida, size_t tam)
 {
+    const char* nome_arquivo;
     char* ponto;
-    strncpy(saida, fonte, tam - 1);
-    saida[tam - 1] = '\0';
+    char nome_saida[256];
 
-    ponto = strrchr(saida, '.');
+    if (mkdir(ASM_DIR, 0777) != 0 && errno != EEXIST)
+    {
+        fprintf(stderr, "Erro TP4: nao foi possivel criar a pasta '%s'.\n", ASM_DIR);
+        return 0;
+    }
+
+    nome_arquivo = strrchr(fonte, '/');
+    nome_arquivo = nome_arquivo != NULL ? nome_arquivo + 1 : fonte;
+
+    strncpy(nome_saida, nome_arquivo, sizeof(nome_saida) - 1);
+    nome_saida[sizeof(nome_saida) - 1] = '\0';
+
+    ponto = strrchr(nome_saida, '.');
     if (ponto != NULL)
         strcpy(ponto, ".asm");
     else
-        strncat(saida, ".asm", tam - strlen(saida) - 1);
+        strncat(nome_saida, ".asm", sizeof(nome_saida) - strlen(nome_saida) - 1);
+
+    snprintf(saida, tam, "%s/%s", ASM_DIR, nome_saida);
+    return 1;
 }
 
 static void nome_asm(const char* original,
@@ -731,6 +748,14 @@ static void alocar_enderecos(SimboloAsm* mapa, int qtd)
     }
 }
 
+static void formatar_endereco(int endereco, char* buffer, size_t tam)
+{
+    if (endereco <= 0xFF)
+        snprintf(buffer, tam, "$%02X", endereco & 0xFF);
+    else
+        snprintf(buffer, tam, "$%04X", endereco & 0xFFFF);
+}
+
 static const char* ref_operando(SimboloAsm* mapa,
                                 int qtd,
                                 const char* operando,
@@ -749,11 +774,11 @@ static const char* ref_operando(SimboloAsm* mapa,
     idx = buscar_asm(mapa, qtd, operando);
     if (idx >= 0)
     {
-        snprintf(buffer, tam, "%s", mapa[idx].asm_nome);
+        formatar_endereco(mapa[idx].endereco, buffer, tam);
         return buffer;
     }
 
-    snprintf(buffer, tam, "v_%s", operando);
+    snprintf(buffer, tam, "$00");
     return buffer;
 }
 
@@ -766,10 +791,10 @@ static const char* ref_memoria(SimboloAsm* mapa,
     int idx = buscar_asm(mapa, qtd, nome);
     if (idx >= 0)
     {
-        snprintf(buffer, tam, "%s", mapa[idx].asm_nome);
+        formatar_endereco(mapa[idx].endereco, buffer, tam);
         return buffer;
     }
-    snprintf(buffer, tam, "v_%s", nome);
+    snprintf(buffer, tam, "$00");
     return buffer;
 }
 
@@ -929,7 +954,10 @@ static void emitir_array(FILE* out,
     {
         if (texto_literal(inst->c, &idx_lit) && pos_lista >= 0)
         {
-            fprintf(out, "    LDA %s+%d\n", mapa[pos_lista].asm_nome, idx_lit);
+            formatar_endereco(mapa[pos_lista].endereco + idx_lit,
+                              lista,
+                              sizeof(lista));
+            fprintf(out, "    LDA %s\n", lista);
             emitir_store(out, mapa, qtd, inst->a);
         }
         else
@@ -947,7 +975,10 @@ static void emitir_array(FILE* out,
         if (texto_literal(inst->b, &idx_lit) && pos_lista >= 0)
         {
             emitir_load(out, mapa, qtd, inst->c);
-            fprintf(out, "    STA %s+%d\n", mapa[pos_lista].asm_nome, idx_lit);
+            formatar_endereco(mapa[pos_lista].endereco + idx_lit,
+                              lista,
+                              sizeof(lista));
+            fprintf(out, "    STA %s\n", lista);
         }
         else
         {
@@ -960,18 +991,31 @@ static void emitir_array(FILE* out,
     }
 }
 
-static void emitir_subrotinas(FILE* out, int usa_mul, int usa_div)
+static void emitir_subrotinas(FILE* out,
+                              SimboloAsm* mapa,
+                              int qtd,
+                              int usa_mul,
+                              int usa_div)
 {
+    char tmp_a[128];
+    char tmp_b[128];
+    char tmp_num[128];
+    char tmp_den[128];
+    char tmp_q[128];
+
     if (usa_mul)
     {
+        ref_memoria(mapa, qtd, "tmp_mul_a", tmp_a, sizeof(tmp_a));
+        ref_memoria(mapa, qtd, "tmp_mul_b", tmp_b, sizeof(tmp_b));
+
         fprintf(out, "\n__mul_u8:\n");
         fprintf(out, "    LDA #0\n");
-        fprintf(out, "    LDX tmp_mul_b\n");
+        fprintf(out, "    LDX %s\n", tmp_b);
         fprintf(out, "__mul_loop:\n");
         fprintf(out, "    CPX #0\n");
         fprintf(out, "    BEQ __mul_done\n");
         fprintf(out, "    CLC\n");
-        fprintf(out, "    ADC tmp_mul_a\n");
+        fprintf(out, "    ADC %s\n", tmp_a);
         fprintf(out, "    DEX\n");
         fprintf(out, "    JMP __mul_loop\n");
         fprintf(out, "__mul_done:\n");
@@ -980,21 +1024,25 @@ static void emitir_subrotinas(FILE* out, int usa_mul, int usa_div)
 
     if (usa_div)
     {
+        ref_memoria(mapa, qtd, "tmp_div_num", tmp_num, sizeof(tmp_num));
+        ref_memoria(mapa, qtd, "tmp_div_den", tmp_den, sizeof(tmp_den));
+        ref_memoria(mapa, qtd, "tmp_div_q", tmp_q, sizeof(tmp_q));
+
         fprintf(out, "\n__div_u8:\n");
         fprintf(out, "    LDA #0\n");
-        fprintf(out, "    STA tmp_div_q\n");
-        fprintf(out, "    LDA tmp_div_den\n");
+        fprintf(out, "    STA %s\n", tmp_q);
+        fprintf(out, "    LDA %s\n", tmp_den);
         fprintf(out, "    BEQ __div_done\n");
-        fprintf(out, "    LDA tmp_div_num\n");
+        fprintf(out, "    LDA %s\n", tmp_num);
         fprintf(out, "__div_loop:\n");
-        fprintf(out, "    CMP tmp_div_den\n");
+        fprintf(out, "    CMP %s\n", tmp_den);
         fprintf(out, "    BCC __div_done\n");
         fprintf(out, "    SEC\n");
-        fprintf(out, "    SBC tmp_div_den\n");
-        fprintf(out, "    INC tmp_div_q\n");
+        fprintf(out, "    SBC %s\n", tmp_den);
+        fprintf(out, "    INC %s\n", tmp_q);
         fprintf(out, "    JMP __div_loop\n");
         fprintf(out, "__div_done:\n");
-        fprintf(out, "    LDA tmp_div_q\n");
+        fprintf(out, "    LDA %s\n", tmp_q);
         fprintf(out, "    RTS\n");
     }
 }
@@ -1052,7 +1100,10 @@ int gci_gerar_assembly_6502(const char* arquivo_fonte,
     }
 
     alocar_enderecos(mapa, qtd_mapa);
-    caminho_saida_asm(arquivo_fonte, caminho, sizeof(caminho));
+    if (!caminho_saida_asm(arquivo_fonte, caminho, sizeof(caminho)))
+    {
+        return 0;
+    }
 
     out = fopen(caminho, "w");
     if (out == NULL)
@@ -1066,7 +1117,7 @@ int gci_gerar_assembly_6502(const char* arquivo_fonte,
     fprintf(out, "; Mapa de memoria zero page\n");
     for (i = 0; i < qtd_mapa; i++)
     {
-        fprintf(out, "define %-20s $%02X ; %s%s\n",
+        fprintf(out, "; %-20s = $%02X ; %s%s\n",
                 mapa[i].asm_nome,
                 mapa[i].endereco & 0xFF,
                 mapa[i].original,
@@ -1142,18 +1193,22 @@ int gci_gerar_assembly_6502(const char* arquivo_fonte,
         else if (strcmp(inst->op, "MUL") == 0)
         {
             emitir_load(out, mapa, qtd_mapa, inst->b);
-            fprintf(out, "    STA tmp_mul_a\n");
+            fprintf(out, "    STA %s\n",
+                    ref_memoria(mapa, qtd_mapa, "tmp_mul_a", r1, sizeof(r1)));
             emitir_load(out, mapa, qtd_mapa, inst->c);
-            fprintf(out, "    STA tmp_mul_b\n");
+            fprintf(out, "    STA %s\n",
+                    ref_memoria(mapa, qtd_mapa, "tmp_mul_b", r1, sizeof(r1)));
             fprintf(out, "    JSR __mul_u8\n");
             emitir_store(out, mapa, qtd_mapa, inst->a);
         }
         else if (strcmp(inst->op, "DIV") == 0)
         {
             emitir_load(out, mapa, qtd_mapa, inst->b);
-            fprintf(out, "    STA tmp_div_num\n");
+            fprintf(out, "    STA %s\n",
+                    ref_memoria(mapa, qtd_mapa, "tmp_div_num", r1, sizeof(r1)));
             emitir_load(out, mapa, qtd_mapa, inst->c);
-            fprintf(out, "    STA tmp_div_den\n");
+            fprintf(out, "    STA %s\n",
+                    ref_memoria(mapa, qtd_mapa, "tmp_div_den", r1, sizeof(r1)));
             fprintf(out, "    JSR __div_u8\n");
             emitir_store(out, mapa, qtd_mapa, inst->a);
         }
@@ -1216,7 +1271,7 @@ int gci_gerar_assembly_6502(const char* arquivo_fonte,
     fprintf(out, "__halt:\n");
     fprintf(out, "    JMP __halt\n");
 
-    emitir_subrotinas(out, usa_mul, usa_div);
+    emitir_subrotinas(out, mapa, qtd_mapa, usa_mul, usa_div);
 
     fclose(out);
     printf("Assembly MOS6502 gerado em: %s\n", caminho);

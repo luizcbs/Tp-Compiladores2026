@@ -14,12 +14,9 @@ MAIN_C   = tabela_simbolos/main.c
 
 GCI_C = gci/gci.c
 
-TESTES   = testes/teste_funcao_musical.sndy \
-           testes/teste_if_else_musical.sndy \
-           testes/teste_lista_musical.sndy \
-           testes/teste_while_musical.sndy \
-           testes/teste_incorreto_musical.sndy \
-           testes/teste_semantico.sndy
+ASM_DIR = saida_asm
+
+TESTES   = $(sort $(wildcard testes/*.sndy))
 
 # -------------------------------------------------------------------
 
@@ -47,6 +44,6 @@ test: $(TARGET)
 # -------------------------------------------------------------------
 
 clean:
-	rm -f $(YACC_C) $(YACC_H) $(LEX_C) $(TARGET) testes/*.asm
+	rm -f $(YACC_C) $(YACC_H) $(LEX_C) $(TARGET) testes/*.asm $(ASM_DIR)/*.asm
 
 .PHONY: all test clean
