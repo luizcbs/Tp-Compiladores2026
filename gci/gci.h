@@ -1,6 +1,8 @@
 #ifndef GCI_H
 #define GCI_H
 
+#include "TabelaSimbolo.h"
+
 /* ================================================================
  * gci.h — Gerador de Código Intermediário (GCI)
  * ================================================================
@@ -79,6 +81,15 @@ void gci_emitir_unario(const char* op,
 void gci_emitir_copy(const char* dest, const char* src);
 
 /* ---------------------------------------------------------------
+ * Funções
+ * --------------------------------------------------------------- */
+void gci_emitir_func_inicio(const char* nome);
+void gci_emitir_func_fim(const char* nome);
+void gci_emitir_parametro(const char* nome);
+void gci_limpar_argumentos_call();
+void gci_adicionar_argumento_call(const char* argumento);
+
+/* ---------------------------------------------------------------
  * Desvios e labels
  * --------------------------------------------------------------- */
 void gci_emitir_jump_condicional(const char* condicao,
@@ -97,5 +108,11 @@ void gci_emitir_read_list(const char* dest,
 void gci_emitir_write_list(const char* lista,
                            const char* indice,
                            const char* valor);
+
+/* ---------------------------------------------------------------
+ * TP4 — Geração de assembly MOS6502
+ * --------------------------------------------------------------- */
+int gci_gerar_assembly_6502(const char* arquivo_fonte,
+                            TabelaSimbolo* tabela_global);
 
 #endif /* GCI_H */

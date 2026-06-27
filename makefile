@@ -47,6 +47,6 @@ test: $(TARGET)
 # -------------------------------------------------------------------
 
 clean:
-	rm -f $(YACC_C) $(YACC_H) $(LEX_C) $(TARGET)
+	rm -f $(YACC_C) $(YACC_H) $(LEX_C) $(TARGET) testes/*.asm
 
 .PHONY: all test clean

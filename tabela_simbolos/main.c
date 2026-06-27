@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "TabelaSimbolo.h"
+#include "gci.h"
 
 /*
  * Interface principal do compilador:
@@ -81,6 +82,7 @@ int main(int argc, char *argv[])
         else
         {
             printf("Programa semanticamente correto\n");
+            gci_gerar_assembly_6502(argv[1], global);
         }
     }
 

@@ -128,6 +128,7 @@ var_decl
 func_decl
     : func_header param_list BLOCO_INI stmt_list END_BLOCO
         {
+            gci_emitir_func_fim(nome_funcao_atual);
             registrar_assinatura(nome_funcao_atual, tipo_retorno_atual,
                                  contagem_params_atual);
             sairTabelaSimbolo(&tabelaAtual);
@@ -137,6 +138,7 @@ func_decl
         }
     | func_header BLOCO_INI stmt_list END_BLOCO
         {
+            gci_emitir_func_fim(nome_funcao_atual);
             registrar_assinatura(nome_funcao_atual, tipo_retorno_atual, 0);
             sairTabelaSimbolo(&tabelaAtual);
             nome_funcao_atual[0] = '\0';
@@ -157,6 +159,8 @@ func_header
             TabelaSimbolo *filho = criarTabelaSimbolo($3, tabelaAtual);
             adicionarFilho(tabelaAtual, filho);
             entrarTabalaSimbolo(&tabelaAtual, filho);
+
+            gci_emitir_func_inicio($3);
         }
     ;
 
@@ -170,6 +174,7 @@ param
         {
             inserir_simbolo($2, $1, "parametro", yylineno, 0);
             contagem_params_atual++;
+            gci_emitir_parametro($2);
         }
     ;
 
@@ -580,7 +585,12 @@ continue_stmt
     ;
 
 func_call_stmt
-    : CALL ID ID { contagem_args_atual = 0; } operando_list FIM_LINHA
+    : CALL ID ID
+        {
+            contagem_args_atual = 0;
+            gci_limpar_argumentos_call();
+        }
+      operando_list FIM_LINHA
         {
             Simbolo *dest = buscarSimbolo(tabelaAtual, $2);
             AssinaturaFuncao *sig = buscar_assinatura($3);
@@ -624,7 +634,10 @@ func_call_stmt
 
 operando_list
     : operando_list operando
-        { contagem_args_atual++; }
+        {
+            contagem_args_atual++;
+            gci_adicionar_argumento_call($2.texto);
+        }
     | /* vazio */
     ;
 
