@@ -1,0 +1,3 @@
+// Declara uma lista de tamanho 27 usando a nova sintaxe musical:
+// C7 (lista) Dm/A (var) G D A F#m (nome) Cm (end) Dmaj7 Emaj7 Fmaj7 G#m (tamanho) B C (;)
+C7 Dm/A G D A F#m Cm Dmaj7 Emaj7 Fmaj7 G#m B C

@@ -1,0 +1,7 @@
+// Declara duas variáveis inteiras e uma booleana em notação musical
+C/G Dm/A G D F#m Cm B C
+C/G Dm/A A E F#m Cm B C
+Em/B Dm/A D G F#m Cm B C
+
+// Erro semântico: soma usando operando booleano
+C/E G D F#m A E F#m D G F#m B C

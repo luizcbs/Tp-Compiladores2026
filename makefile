@@ -1,5 +1,5 @@
 CC      = gcc
-CFLAGS  = -I yacc -I tabela_simbolos
+CFLAGS  = -I yacc -I tabela_simbolos -I gci
 TARGET  = soundy
 
 YACC_SRC = yacc/translate.y
@@ -12,18 +12,21 @@ LEX_C    = lex/lex.yy.c
 TABELA_C = tabela_simbolos/TabelaSimbolo.c
 MAIN_C   = tabela_simbolos/main.c
 
-TESTES   = testes/teste_funcao.sndy \
-           testes/teste_if_else.sndy \
-           testes/teste_lista.sndy \
-           testes/teste_while.sndy \
-           testes/teste_incorreto.sndy
+GCI_C = gci/gci.c
+
+TESTES   = testes/teste_funcao_musical.sndy \
+           testes/teste_if_else_musical.sndy \
+           testes/teste_lista_musical.sndy \
+           testes/teste_while_musical.sndy \
+           testes/teste_incorreto_musical.sndy \
+           testes/teste_semantico.sndy
 
 # -------------------------------------------------------------------
 
 all: $(TARGET)
 
 $(TARGET): $(YACC_C) $(LEX_C)
-	$(CC) $(CFLAGS) $(YACC_C) $(LEX_C) $(TABELA_C) $(MAIN_C) -o $(TARGET)
+	$(CC) $(CFLAGS) $(YACC_C) $(LEX_C) $(TABELA_C) $(GCI_C) $(MAIN_C) -o $(TARGET)
 
 $(YACC_C) $(YACC_H): $(YACC_SRC)
 	bison -d -o $(YACC_C) $(YACC_SRC)

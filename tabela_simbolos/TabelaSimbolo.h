@@ -12,9 +12,9 @@ typedef enum {
     TIPO_INT,
     TIPO_FLOAT,
     TIPO_BOOL,
-    TIPO_CHAR,
     TIPO_NULL,
-    TIPO_LISTA
+    TIPO_LISTA,
+    TIPO_INVALIDO
 } Tipo;
 
 typedef enum {
@@ -30,6 +30,7 @@ typedef struct {
     Categoria categoria;
 
     int linhaDeclaracao;
+    int tamanhoLista;
 
 } Simbolo;
 
@@ -50,10 +51,11 @@ typedef struct tabelaSimbolo {
 TabelaSimbolo *criarTabelaSimbolo(char *nome, TabelaSimbolo *pai);
 void adicionarFilho(TabelaSimbolo *pai, TabelaSimbolo *filho);
 
-Simbolo criarSimbolo(char *nome, Tipo tipo, Categoria categoria, int linha);
+Simbolo criarSimbolo(char *nome, Tipo tipo, Categoria categoria, int linha, int tamanhoLista);
 int inserirSimbolo(TabelaSimbolo *tabela, Simbolo simbolo);
 
 Simbolo *buscarNaTabelaSimboloAtual(TabelaSimbolo *tabela, char *nome);
+Simbolo *buscarSimbolo(TabelaSimbolo *tabelaAtual, char *nome);
 
 void entrarTabalaSimbolo(TabelaSimbolo **tabelaAtual,TabelaSimbolo *novaTabela);
 void sairTabelaSimbolo(TabelaSimbolo **tabelaAtual);

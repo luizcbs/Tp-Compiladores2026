@@ -1,0 +1,33 @@
+// C/G Dm/A nota Cm B C (Ajustado para o novo padrão de declaração)
+C/G Dm/A G A F#m Cm B C
+
+// C/E nota 0 7 B C
+C/E G A F#m Cmaj7 G#m Dmaj7 Fmaj7 G#m B C
+
+// C/G Dm/A media Cm B C
+C/G Dm/A D E F#m Cm B C
+
+// C/E media 0 6 B C
+C/E D E F#m Cmaj7 G#m Dmaj7 Emaj7 G#m B C
+
+// C/G Dm/A situacao Cm B C
+C/G Dm/A A E F#m Cm B C
+
+// Em/B Dm/A aprovado Cm B C
+Em/B Dm/A E G F#m Cm B C
+
+// G7/B aprovado nota media B C
+G7/B E G F#m G A F#m D E F#m B C
+
+F C
+    // aprovado
+    E G F#m B C
+    
+    // C/E situacao 0 1 B C
+    C/E A E F#m Cmaj7 G#m Dmaj7 G#m B C
+Cm
+
+Em C
+    // C/E situacao 0 0 B C
+    C/E A E F#m Cmaj7 G#m Cmaj7 G#m B C
+Cm

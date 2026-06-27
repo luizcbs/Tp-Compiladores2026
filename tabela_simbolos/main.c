@@ -12,6 +12,7 @@
 extern int yyparse(void);
 extern FILE *yyin;
 extern int yylineno;
+int houve_erro_semantico = 0;
 
 TabelaSimbolo *global = NULL;
 TabelaSimbolo *tabelaAtual = NULL;
@@ -60,6 +61,7 @@ int main(int argc, char *argv[])
 
     rewind(yyin);
     yylineno = 1;
+    houve_erro_semantico = 0;
 
     resultado = yyparse();
 
@@ -71,8 +73,17 @@ int main(int argc, char *argv[])
             imprimirArvore(global, 0);
         }
         printf("Programa sintaticamente correto\n");
+
+        if (houve_erro_semantico)
+        {
+            printf("Programa semanticamente incorreto\n");
+        }
+        else
+        {
+            printf("Programa semanticamente correto\n");
+        }
     }
 
     fclose(yyin);
-    return resultado == 0 ? 0 : 1;
+    return (resultado == 0 && !houve_erro_semantico) ? 0 : 1;
 }
