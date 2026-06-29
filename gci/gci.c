@@ -1268,8 +1268,8 @@ int gci_gerar_assembly_6502(const char* arquivo_fonte,
     }
 
     if (!main_emitido) fprintf(out, "__main:\n");
-    fprintf(out, "__halt:\n");
-    fprintf(out, "    JMP __halt\n");
+    fprintf(out, "__applause:\n");
+    fprintf(out, "    JMP __applause\n");
 
     emitir_subrotinas(out, mapa, qtd_mapa, usa_mul, usa_div);
 

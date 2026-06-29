@@ -48,5 +48,5 @@ __cmp_true_1:
 __cmp_end_1:
     JMP L0
 L1:
-__halt:
-    JMP __halt
+__applause:
+    JMP __applause

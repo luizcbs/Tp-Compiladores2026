@@ -31,5 +31,5 @@ __main:
     STA $05
     JSR fn_GG
     STA $00
-__halt:
-    JMP __halt
+__applause:
+    JMP __applause

@@ -1,0 +1,24 @@
+// Teste para visualizar mudancas na memoria do Easy6502
+// Variaveis esperadas no mapa:
+// G em $00, D em $01, A em $02
+
+// C/G Dm/A G Cm B C
+C/G Dm/A G F#m Cm B C
+
+// C/G Dm/A D Cm B C
+C/G Dm/A D F#m Cm B C
+
+// C/G Dm/A A Cm B C
+C/G Dm/A A F#m Cm B C
+
+// C/E G 0 3 B C
+// Depois desta linha: $00 deve virar 03
+C/E G F#m Cmaj7 G#m Fmaj7 G#m B C
+
+// C/E D 0 4 B C
+// Depois desta linha: $01 deve virar 04
+C/E D F#m Cmaj7 G#m Dmaj7 Cmaj7 G#m B C
+
+// C/E A G D B C
+// Depois desta linha: $02 deve virar 07
+C/E A F#m G F#m D F#m B C

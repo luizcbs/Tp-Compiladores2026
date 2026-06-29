@@ -35,5 +35,5 @@ L0:
     LDA #0
     STA $02
 L1:
-__halt:
-    JMP __halt
+__applause:
+    JMP __applause

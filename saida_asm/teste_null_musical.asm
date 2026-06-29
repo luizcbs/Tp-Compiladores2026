@@ -10,5 +10,5 @@
 __main:
     LDA #0
     STA $00
-__halt:
-    JMP __halt
+__applause:
+    JMP __applause

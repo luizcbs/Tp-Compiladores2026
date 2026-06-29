@@ -11,5 +11,5 @@
 
 *=$0600
 __main:
-__halt:
-    JMP __halt
+__applause:
+    JMP __applause
