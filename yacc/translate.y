@@ -636,7 +636,10 @@ operando_list
     : operando_list operando
         {
             contagem_args_atual++;
-            gci_adicionar_argumento_call($2.texto);
+            /* Emite PARAM antes do CALL — o Bison reduz operando_list
+               da esquerda para a direita, garantindo a ordem correta.
+               No TP4 cada PARAM será traduzido para LDA+STA no MOS6502. */
+            gci_emitir_param($2.texto);
         }
     | /* vazio */
     ;

@@ -479,8 +479,8 @@ void gci_emitir_func_fim(const char* nome)
 
 void gci_emitir_parametro(const char* nome)
 {
-    registrar_ir("PARAM", nome, "", "");
-    printf("    PARAM %s\n", nome);
+    registrar_ir("PARAM_DEF", nome, "", "");
+    printf("    PARAM_DEF %s\n", nome);
 }
 
 void gci_limpar_argumentos_call()
@@ -529,6 +529,12 @@ void gci_emitir_label(const char* label)
 /* ================================================================
  * FUNÇÕES E VETORES
  * ================================================================ */
+void gci_emitir_param(const char* valor)
+{
+    registrar_ir("PARAM_ARG", valor, "", "");
+    gci_adicionar_argumento_call(valor);
+    printf("    PARAM %s\n", valor);
+}
 
 void gci_emitir_call(const char* dest, const char* func)
 {
@@ -543,6 +549,7 @@ void gci_emitir_call(const char* dest, const char* func)
         ir[qtd_ir - 1].args[i][sizeof(ir[qtd_ir - 1].args[i]) - 1] = '\0';
     }
     printf("    CALL %s, %s\n", dest, func);
+    gci_limpar_argumentos_call();
 }
 
 void gci_emitir_return(const char* valor)
@@ -1160,7 +1167,7 @@ int gci_gerar_assembly_6502(const char* arquivo_fonte,
             }
             em_funcao = 0;
         }
-        else if (strcmp(inst->op, "PARAM") == 0)
+        else if (strcmp(inst->op, "PARAM_DEF") == 0)
         {
             char arg_nome[32];
             snprintf(arg_nome, sizeof(arg_nome), "__arg%d", param_idx++);
@@ -1168,6 +1175,10 @@ int gci_gerar_assembly_6502(const char* arquivo_fonte,
                     ref_memoria(mapa, qtd_mapa, arg_nome, r1, sizeof(r1)));
             fprintf(out, "    STA %s\n",
                     ref_memoria(mapa, qtd_mapa, inst->a, r2, sizeof(r2)));
+        }
+        else if (strcmp(inst->op, "PARAM_ARG") == 0)
+        {
+            /* Argumentos de chamada são materializados no bloco CALL. */
         }
         else if (strcmp(inst->op, "COPY") == 0)
         {
