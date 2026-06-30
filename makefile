@@ -14,12 +14,16 @@ MAIN_C   = tabela_simbolos/main.c
 
 GCI_C = gci/gci.c
 
-TESTES   = testes/teste_funcao_musical.sndy \
-           testes/teste_if_else_musical.sndy \
-           testes/teste_lista_musical.sndy \
-           testes/teste_while_musical.sndy \
-           testes/teste_incorreto_musical.sndy \
-           testes/teste_semantico.sndy
+TESTES  =  testes/teste_call_args_errado.sndy \
+           testes/teste_call_dois_args.sndy \
+           testes/teste_call_literais.sndy \
+           testes/teste_call_sem_args.sndy \
+           testes/teste_call_um_arg.sndy \
+		   testes/teste_call_args_errado.sndy \
+           testes/teste_call_dois_args.sndy \
+           testes/teste_call_literais.sndy \
+           testes/teste_call_sem_args.sndy \
+           testes/teste_call_um_arg.sndy
 
 # -------------------------------------------------------------------
 

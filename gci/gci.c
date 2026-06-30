@@ -420,6 +420,14 @@ void gci_emitir_label(const char* label)
  * FUNÇÕES E VETORES
  * ================================================================ */
 
+/* ================================================================
+ * FUNÇÕES E VETORES
+ * ================================================================ */
+void gci_emitir_param(const char* valor)
+{
+    printf("    PARAM %s\n", valor);
+}
+
 void gci_emitir_call(const char* dest, const char* func)
 {
     printf("    CALL %s, %s\n", dest, func);

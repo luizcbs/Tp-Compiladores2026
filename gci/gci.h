@@ -89,6 +89,7 @@ void gci_emitir_label(const char* label);
 /* ---------------------------------------------------------------
  * Funções e vetores
  * --------------------------------------------------------------- */
+void gci_emitir_param(const char* valor);
 void gci_emitir_call(const char* dest, const char* func);
 void gci_emitir_return(const char* valor);
 void gci_emitir_read_list(const char* dest,
