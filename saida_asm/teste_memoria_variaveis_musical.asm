@@ -19,4 +19,4 @@ __main:
     ADC $01
     STA $02
 __applause:
-    JMP __applause
+    BRK

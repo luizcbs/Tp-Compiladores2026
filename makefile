@@ -22,7 +22,7 @@ TESTES   = $(sort $(wildcard testes/*.sndy))
 
 all: $(TARGET)
 
-$(TARGET): $(YACC_C) $(LEX_C)
+$(TARGET): $(YACC_C) $(LEX_C) $(TABELA_C) $(GCI_C) $(MAIN_C)
 	$(CC) $(CFLAGS) $(YACC_C) $(LEX_C) $(TABELA_C) $(GCI_C) $(MAIN_C) -o $(TARGET)
 
 $(YACC_C) $(YACC_H): $(YACC_SRC)

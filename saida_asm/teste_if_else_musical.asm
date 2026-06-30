@@ -36,4 +36,4 @@ L0:
     STA $02
 L1:
 __applause:
-    JMP __applause
+    BRK

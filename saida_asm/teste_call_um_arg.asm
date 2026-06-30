@@ -24,4 +24,4 @@ __main:
     JSR fn_G
     STA $00
 __applause:
-    JMP __applause
+    BRK

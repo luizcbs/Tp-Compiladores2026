@@ -49,4 +49,4 @@ __cmp_end_1:
     JMP L0
 L1:
 __applause:
-    JMP __applause
+    BRK

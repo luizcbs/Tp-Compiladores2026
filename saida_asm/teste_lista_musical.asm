@@ -17,4 +17,4 @@ __main:
     LDA $00
     STA $06
 __applause:
-    JMP __applause
+    BRK

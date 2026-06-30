@@ -12,4 +12,4 @@
 *=$0600
 __main:
 __applause:
-    JMP __applause
+    BRK
