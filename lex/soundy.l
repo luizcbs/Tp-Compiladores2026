@@ -1,6 +1,6 @@
 %{
 /*
- * Soundy Script -- Analisador Lexico (Trabalho Pratico 2)
+ * Soundy Script -- Analisador Lexico (Trabalho Pratico 4)
  */
 
 #include <stdio.h>
@@ -17,16 +17,16 @@ newline     \n
 comment     "//"[^\n]*
 
 /* Literais */
-null        "G/D"
+null        "B7"
 
 /* Alfabeto Quaternário Musical (Base 4) e Identificadores */
 letra_var   ("G"|"D"|"A"|"E")
 letra_num   ("Cmaj7"|"Dmaj7"|"Emaj7"|"Fmaj7")
 
 /* Tipos */
-int         "C/G"
-float       "Am/E"
-bool        "Em/B"
+int         "C7"
+float       "D7"
+bool        "E7"
 tipo        ({int}|{float}|{bool})
 
 /* Acordes */
@@ -59,45 +59,46 @@ chord       {cifra}{alter}?{chord_body}?{bass}?
 {comment}       { /* ignora comentario */ }
 
 "B"[ \t]+"C"    { return FIM_LINHA; }
+"F#"            { return FIM_LINHA; }
 
-"C7"            { strncpy(yylval.sval, yytext, 255); return KW_LISTA; }
+"F7"            { strncpy(yylval.sval, yytext, 255); return KW_LISTA; }
 {tipo}          { strncpy(yylval.sval, yytext, 255); return TIPO; }
 
-"C/E"           { return OP_ADD; }
-"Dm/F#"         { return OP_SUB; }
-"E/G"           { return OP_MUL; }
-"F/A"           { return OP_DIV; }
+"Em"            { return OP_ADD; }
+"Cm"            { return OP_SUB; }
+"Am"            { return OP_MUL; }
+"Bm"            { return OP_DIV; }
 
-"G/B"           { return OP_AND; }
-"Am/C"          { return OP_OR; }
-"Bm/D"          { return OP_NOT; }
+"Dm"            { return OP_AND; }
+"Gm"            { return OP_OR;  }
+"Fm"            { return OP_NOT; }
 
-"C7/E"          { return OP_EQ; }
-"Dm7/F#"        { return OP_NEQ; }
-"E7/G"          { return OP_GT; }
-"F7/A"          { return OP_LT; }
-"G7/B"          { return OP_GTE; }
-"A7/C#"         { return OP_LTE; }
+"Dm7"           { return OP_EQ;  }
+"Cdim7"         { return OP_NEQ; }
+"Gmaj7"         { return OP_GT;  }
+"Fdim7"         { return OP_LT;  }
+"Am7"           { return OP_GTE; }
+"Bm7"           { return OP_LTE; }
 
-"Dm/A"          { return VAR; }
-"Bm/F#"         { return FUNC; }
-"A/C#"          { return CALL; }
+"G7"            { return VAR; }
+"A7"            { return FUNC; }
+"F#maj7"        { return CALL; }
 
-"C7maj"         { return READ_LIST; }
-"Cm7"           { return WRITE_LIST; }
+"Cm7"           { return READ_LIST; }
+"Bbmaj7"        { return WRITE_LIST; }
 
-"Bm"            { return WHILE; }
-"Em"            { return ELSE; }
+"Ebmaj7"        { return WHILE; }
+"C#"            { return ELSE; }
 "F"             { return IF; }
-"Am"            { return KW_RETURN; }
-"G#dim"         { return KW_BREAK; }
-"A7"            { return KW_CONTINUE; }
+"F#7"           { return KW_RETURN; }
+"Bdim7"         { return KW_BREAK; }
+"Abmaj7"        { return KW_CONTINUE; }
 
 "C"             { return BLOCO_INI; }
-"Cm"            { return END_BLOCO; }
+"Bbm"           { return END_BLOCO; }
 
-"true"          { yylval.ival = 1; return LIT_BOOL; }
-"false"         { yylval.ival = 0; return LIT_BOOL; }
+"Bb"            { yylval.ival = 1; return LIT_BOOL; }
+"Ab"            { yylval.ival = 0; return LIT_BOOL; }
 
 {null}          { return LIT_NULL; }
 
@@ -120,8 +121,8 @@ chord       {cifra}{alter}?{chord_body}?{bass}?
                 return ID; 
             }
 
-({letra_num}[ \t\n]*)+"Bdim"[ \t\n]*({letra_num}[ \t\n]*)+"G#m" { 
-                /* Processa floats em Base 4: parte_inteira Bdim parte_fracionaria G#m */
+({letra_num}[ \t\n]*)+"Bdim"[ \t\n]*({letra_num}[ \t\n]*)+"Abm" { 
+                /* Processa floats em Base 4: parte_inteira Bdim parte_fracionaria Abm */
                 double val = 0.0;
                 double divisor = 4.0;
                 int is_fraction = 0;
@@ -129,7 +130,7 @@ chord       {cifra}{alter}?{chord_body}?{bass}?
 
                 while(*p != '\0') {
                     if(*p == ' ' || *p == '\t' || *p == '\n') { p++; continue; }
-                    if(strncmp(p, "G#m", 3) == 0) break;
+                    if(strncmp(p, "Abm", 3) == 0) break;
                     
                     /* Se encontrou a vírgula, ativa o modo fracionário */
                     if(strncmp(p, "Bdim", 4) == 0) { 
@@ -158,13 +159,13 @@ chord       {cifra}{alter}?{chord_body}?{bass}?
                 return LIT_FLOAT; 
             }
 
-({letra_num}[ \t\n]*)+"G#m" { 
+({letra_num}[ \t\n]*)+"Abm" { 
                 /* 2. Processa os acordes em Base 4 e converte para decimal */
                 int val = 0;
                 char *p = yytext;
                 while(*p != '\0') {
                     if(*p == ' ' || *p == '\t' || *p == '\n') { p++; continue; }
-                    if(strncmp(p, "G#m", 3) == 0) break;
+                    if(strncmp(p, "Abm", 3) == 0) break;
                     
                     if(strncmp(p, "Cmaj7", 5) == 0)      { val = val * 4 + 0; p += 5; }
                     else if(strncmp(p, "Dmaj7", 5) == 0) { val = val * 4 + 1; p += 5; }
