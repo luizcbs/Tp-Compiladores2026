@@ -1,18 +1,21 @@
 // 1. Declaracao de uma lista de tamanho 5 (Base 4: 11_4 = 5)
-// Antigo: C7 Dm/A notas Cm 5 B C
-// Novo:   C7 Dm/A G A F#m Cm Dmaj7 Dmaj7 G#m B C
-C7 Dm/A G A F#m Cm Dmaj7 Dmaj7 G#m B C
+// Antigo: F7 G7 notas Bbm 5 B C
+// Novo:   F7 G7 G A F#m Bbm Dmaj7 Dmaj7 Abm B C
+F7 G7 G A F#m Bbm Dmaj7 Dmaj7 Abm B C
 
 // 2. Declaracao de uma variavel 'idx'
 // Novo: D E F#m
-C/G Dm/A D E F#m Cm Dmaj7 G#m B C
+C7 G7 D E F#m Bbm Dmaj7 Abm B C
 
-// 3. Escrita na lista: notas[0] = 2.5 (2.2 em base 4)
-// Novo: Cm7 notas 0 2.5 B C
-// Codigo: Cm7 G A F#m Cmaj7 G#m Emaj7 Bdim Emaj7 G#m B C
-Cm7 G A F#m Cmaj7 G#m Emaj7 Bdim Emaj7 G#m B C
+// 3. Declaracao da variavel 'primeira', que recebe a leitura da lista
+D7 G7 E A D F#m Bbm B C
 
-// 4. Leitura da lista: primeira = notas[0]
-// Novo: C7maj primeira notas 0 B C
-// Codigo: C7maj E A D F#m G A F#m Cmaj7 G#m B C
-C7maj E A D F#m G A F#m Cmaj7 G#m B C
+// 4. Escrita na lista: notas[0] = 2.5 (2.2 em base 4)
+// Novo: Bbmaj7 notas 0 2.5 B C
+// Codigo: Bbmaj7 G A F#m Cmaj7 Abm Emaj7 Bdim Emaj7 Abm B C
+Bbmaj7 G A F#m Cmaj7 Abm Emaj7 Bdim Emaj7 Abm B C
+
+// 5. Leitura da lista: primeira = notas[0]
+// Novo: Cm7 primeira notas 0 B C
+// Codigo: Cm7 E A D F#m G A F#m Cmaj7 Abm B C
+Cm7 E A D F#m G A F#m Cmaj7 Abm B C

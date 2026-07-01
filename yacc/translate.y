@@ -743,11 +743,11 @@ static void erro_semantico(const char *msg, int linha)
 
 static Tipo tipo_de_texto(const char *tipo)
 {
-    if (strcmp(tipo, "int") == 0 || strcmp(tipo, "C/G") == 0) return TIPO_INT;
-    if (strcmp(tipo, "float") == 0 || strcmp(tipo, "Am/E") == 0) return TIPO_FLOAT;
-    if (strcmp(tipo, "bool") == 0 || strcmp(tipo, "Em/B") == 0) return TIPO_BOOL;
-    if (strcmp(tipo, "lista") == 0 || strcmp(tipo, "C7") == 0) return TIPO_LISTA;
-    if (strcmp(tipo, "null") == 0 || strcmp(tipo, "G/D") == 0) return TIPO_NULL;
+    if (strcmp(tipo, "int") == 0 || strcmp(tipo, "C7") == 0) return TIPO_INT;
+    if (strcmp(tipo, "float") == 0 || strcmp(tipo, "D7") == 0) return TIPO_FLOAT;
+    if (strcmp(tipo, "bool") == 0 || strcmp(tipo, "E7") == 0) return TIPO_BOOL;
+    if (strcmp(tipo, "lista") == 0 || strcmp(tipo, "F7") == 0) return TIPO_LISTA;
+    if (strcmp(tipo, "null") == 0 || strcmp(tipo, "B7") == 0) return TIPO_NULL;
     return TIPO_INVALIDO;
 }
 

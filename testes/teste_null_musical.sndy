@@ -1,7 +1,7 @@
 // 1. Declara a variavel 'ponteiro'
-// Antes: C/G Dm/A ponteiro Cm B C
-C/G Dm/A G D G F#m Cm B C
+// Antes: C7 G7 ponteiro Bbm B C
+C7 G7 G D G F#m Bbm B C
 
 // 2. Atribui null a ela: ponteiro = 0 + null
-// Antes: C/E ponteiro 0 G/D B C
-C/E G D G F#m Cmaj7 G#m G/D B C
+// Antes: Em ponteiro 0 B7 B C
+Em G D G F#m Cmaj7 Abm B7 B C

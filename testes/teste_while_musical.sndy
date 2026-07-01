@@ -1,26 +1,26 @@
-// C/E contador 0 0 B C
-C/G Dm/A G G F#m Cm B C
-C/E G G F#m Cmaj7 G#m Cmaj7 G#m B C
+// Em contador 0 0 B C
+C7 G7 G G F#m Bbm B C
+Em G G F#m Cmaj7 Abm Cmaj7 Abm B C
 
-// C/E um 0 1 B C
-C/G Dm/A G A F#m Cm B C
-C/E G A F#m Cmaj7 G#m Dmaj7 G#m B C
+// Em um 0 1 B C
+C7 G7 G A F#m Bbm B C
+Em G A F#m Cmaj7 Abm Dmaj7 Abm B C
 
-// C/E limite 0 5 B C
-C/G Dm/A A D F#m Cm B C
-C/E A D F#m Cmaj7 G#m Dmaj7 Dmaj7 G#m B C
+// Em limite 0 5 B C
+C7 G7 A D F#m Bbm B C
+Em A D F#m Cmaj7 Abm Dmaj7 Dmaj7 Abm B C
 
-// F7/A continua contador limite B C
-Em/B Dm/A D E F#m Cm B C
-F7/A D E F#m G G F#m A D F#m B C
+// Fdim7 continua contador limite B C
+E7 G7 D E F#m Bbm B C
+Fdim7 D E F#m G G F#m A D F#m B C
 
-Bm C
+Ebmaj7 C
     // continua
     D E F#m B C
     
-    // C/E contador contador um B C
-    C/E G G F#m G G F#m G A F#m B C
+    // Em contador contador um B C
+    Em G G F#m G G F#m G A F#m B C
     
-    // F7/A continua contador limite B C
-    F7/A D E F#m G G F#m A D F#m B C
-Cm
+    // Fdim7 continua contador limite B C
+    Fdim7 D E F#m G G F#m A D F#m B C
+Bbm

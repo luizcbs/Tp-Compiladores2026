@@ -2,23 +2,23 @@
 // Variaveis esperadas no mapa:
 // G em $00, D em $01, A em $02
 
-// C/G Dm/A G Cm B C
-C/G Dm/A G F#m Cm B C
+// C7 G7 G Bbm B C
+C7 G7 G F#m Bbm B C
 
-// C/G Dm/A D Cm B C
-C/G Dm/A D F#m Cm B C
+// C7 G7 D Bbm B C
+C7 G7 D F#m Bbm B C
 
-// C/G Dm/A A Cm B C
-C/G Dm/A A F#m Cm B C
+// C7 G7 A Bbm B C
+C7 G7 A F#m Bbm B C
 
-// C/E G 0 3 B C
+// Em G 0 3 B C
 // Depois desta linha: $00 deve virar 03
-C/E G F#m Cmaj7 G#m Fmaj7 G#m B C
+Em G F#m Cmaj7 Abm Fmaj7 Abm B C
 
-// C/E D 0 4 B C
+// Em D 0 4 B C
 // Depois desta linha: $01 deve virar 04
-C/E D F#m Cmaj7 G#m Dmaj7 Cmaj7 G#m B C
+Em D F#m Cmaj7 Abm Dmaj7 Cmaj7 Abm B C
 
-// C/E A G D B C
+// Em A G D B C
 // Depois desta linha: $02 deve virar 07
-C/E A F#m G F#m D F#m B C
+Em A F#m G F#m D F#m B C

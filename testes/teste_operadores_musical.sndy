@@ -1,11 +1,31 @@
-// C/E total valor1 valor2 B C
-C/E G G F#m G A F#m G E F#m B C
+// Declaracoes inteiras para soma
+C7 G7 G G F#m Bbm B C
+C7 G7 G A F#m Bbm Dmaj7 Abm B C
+C7 G7 G E F#m Bbm Emaj7 Abm B C
 
-// Dm/F# saldo ganho gasto B C
-Dm/F# A A F#m A G F#m A E F#m B C
+// Em total valor1 valor2 B C
+Em G G F#m G A F#m G E F#m B C
 
-// E/G area base altura B C
-E/G E E F#m E G F#m E A F#m B C
+// Declaracoes inteiras para subtracao
+C7 G7 A A F#m Bbm B C
+C7 G7 A G F#m Bbm Fmaj7 Abm B C
+C7 G7 A E F#m Bbm Dmaj7 Abm B C
 
-// G/B pode_entrar tem_ingresso maior_idade B C
-G/B D D F#m D A F#m D G F#m B C
+// Cm saldo ganho gasto B C
+Cm A A F#m A G F#m A E F#m B C
+
+// Declaracoes inteiras para multiplicacao
+C7 G7 E E F#m Bbm B C
+C7 G7 E G F#m Bbm Emaj7 Abm B C
+C7 G7 E A F#m Bbm Fmaj7 Abm B C
+
+// Am area base altura B C
+Am E E F#m E G F#m E A F#m B C
+
+// Declaracoes booleanas para operacao logica
+E7 G7 D D F#m Bbm Ab B C
+E7 G7 D A F#m Bbm Bb B C
+E7 G7 D G F#m Bbm Bb B C
+
+// Dm pode_entrar tem_ingresso maior_idade B C
+Dm D D F#m D A F#m D G F#m B C
