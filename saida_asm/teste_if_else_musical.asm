@@ -15,8 +15,8 @@ __main:
     STA $00
     LDA #6
     STA $01
-    LDA $00
-    CMP $01
+    LDA #7
+    CMP #6
     BCS __cmp_true_0
 __cmp_false_0:
     LDA #0

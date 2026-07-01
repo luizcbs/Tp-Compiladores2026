@@ -12,7 +12,7 @@
 fn_G:
     LDA #0
     STA $01
-    LDA $01
+    LDA #0
     RTS
 __main:
     JSR fn_G

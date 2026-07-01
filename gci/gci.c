@@ -34,6 +34,15 @@ static int qtd_ir = 0;
 static char args_call_atual[MAX_ARGS_CALL][256];
 static int qtd_args_call_atual = 0;
 
+typedef struct {
+    char nome[256];
+    char valor[64];
+    int ativo;
+} ConstanteGCI;
+
+static ConstanteGCI constantes_gci[MAX_ASM_SIMBOLOS];
+static int qtd_constantes_gci = 0;
+
 static void registrar_ir(const char* op,
                          const char* a,
                          const char* b,
@@ -96,6 +105,100 @@ static int eh_igual(const char* s, double val)
     double v;
     if (!eh_literal_numerico(s, &v)) return 0;
     return v == val;
+}
+
+static int eh_operacao_comparacao(const char* op);
+
+static void limpar_constantes_gci()
+{
+    qtd_constantes_gci = 0;
+}
+
+static int buscar_constante_gci(const char* nome)
+{
+    int i;
+
+    if (nome == NULL || nome[0] == '\0') return -1;
+
+    for (i = 0; i < qtd_constantes_gci; i++)
+    {
+        if (constantes_gci[i].ativo &&
+            strcmp(constantes_gci[i].nome, nome) == 0)
+        {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+static void invalidar_constante_gci(const char* nome)
+{
+    int idx = buscar_constante_gci(nome);
+    if (idx >= 0) constantes_gci[idx].ativo = 0;
+}
+
+static int obter_constante_gci(const char* nome, char* valor, size_t tam)
+{
+    int idx = buscar_constante_gci(nome);
+
+    if (idx < 0) return 0;
+
+    snprintf(valor, tam, "%s", constantes_gci[idx].valor);
+    return 1;
+}
+
+static void definir_constante_gci(const char* nome, const char* valor)
+{
+    int idx;
+
+    if (nome == NULL || nome[0] == '\0') return;
+    if (!eh_literal_numerico(valor, NULL)) return;
+
+    idx = buscar_constante_gci(nome);
+    if (idx < 0)
+    {
+        if (qtd_constantes_gci >= MAX_ASM_SIMBOLOS) return;
+        idx = qtd_constantes_gci++;
+    }
+
+    strncpy(constantes_gci[idx].nome,
+            nome,
+            sizeof(constantes_gci[idx].nome) - 1);
+    constantes_gci[idx].nome[sizeof(constantes_gci[idx].nome) - 1] = '\0';
+
+    strncpy(constantes_gci[idx].valor,
+            valor,
+            sizeof(constantes_gci[idx].valor) - 1);
+    constantes_gci[idx].valor[sizeof(constantes_gci[idx].valor) - 1] = '\0';
+    constantes_gci[idx].ativo = 1;
+}
+
+static void resolver_constante_gci(const char* entrada,
+                                   char* saida,
+                                   size_t tam)
+{
+    char valor[64];
+
+    if (entrada == NULL)
+    {
+        if (tam > 0) saida[0] = '\0';
+        return;
+    }
+
+    if (eh_literal_numerico(entrada, NULL))
+    {
+        snprintf(saida, tam, "%s", entrada);
+        return;
+    }
+
+    if (obter_constante_gci(entrada, valor, sizeof(valor)))
+    {
+        snprintf(saida, tam, "%s", valor);
+        return;
+    }
+
+    snprintf(saida, tam, "%s", entrada);
 }
 
 /* ================================================================
@@ -204,6 +307,7 @@ void gci_emitir_operacao(const char* op,
                          const char* src2)
 {
     registrar_ir(op, dest, src1, src2);
+    invalidar_constante_gci(dest);
     printf("    %s %s, %s, %s\n", op, dest, src1, src2);
 }
 
@@ -211,21 +315,53 @@ void gci_emitir_unario(const char* op,
                        const char* dest,
                        const char* src)
 {
-    registrar_ir(op, dest, src, "");
-    printf("    %s %s, %s\n", op, dest, src);
+    char src_resolvido[256];
+    double valor;
+
+    resolver_constante_gci(src, src_resolvido, sizeof(src_resolvido));
+
+    if (strcmp(op, "NOT") == 0 &&
+        eh_literal_numerico(src_resolvido, &valor))
+    {
+        gci_emitir_copy(dest, valor == 0.0 ? "1" : "0");
+        return;
+    }
+
+    registrar_ir(op, dest, src_resolvido, "");
+    invalidar_constante_gci(dest);
+    printf("    %s %s, %s\n", op, dest, src_resolvido);
 }
 
 void gci_emitir_copy(const char* dest, const char* src)
 {
-    registrar_ir("COPY", dest, src, "");
-    printf("    COPY %s, %s\n", dest, src);
+    char src_resolvido[256];
+
+    resolver_constante_gci(src, src_resolvido, sizeof(src_resolvido));
+
+    if (dest != NULL && strcmp(dest, src_resolvido) == 0)
+    {
+        printf("    // [copia redundante removida] COPY %s, %s\n",
+               dest,
+               src_resolvido);
+        return;
+    }
+
+    registrar_ir("COPY", dest, src_resolvido, "");
+
+    if (eh_literal_numerico(src_resolvido, NULL))
+        definir_constante_gci(dest, src_resolvido);
+    else
+        invalidar_constante_gci(dest);
+
+    printf("    COPY %s, %s\n", dest, src_resolvido);
 }
 
 /* ================================================================
  * OTIMIZAÇÃO 1 — DESDOBRAMENTO DE CONSTANTE (constant folding)
  *
- * Se ambos os operandos são literais numéricos, calcula o resultado
- * em tempo de compilação e emite COPY dest, resultado.
+ * Se ambos os operandos são literais numéricos, calcula operações
+ * aritméticas/lógicas em tempo de compilação e emite COPY dest,
+ * resultado.
  *
  * Justificativa:
  *   O Flex converte literais para int/double em yylval e o
@@ -233,6 +369,11 @@ void gci_emitir_copy(const char* dest, const char* src)
  *   ("3", "4", "0", "1"...). Não há motivo para emitir
  *   ADD x, 3, 4 e calcular 7 em runtime quando podemos calcular
  *   agora e emitir COPY x, 7.
+ *
+ * Observação:
+ *   Comparações relacionais não são dobradas aqui, mesmo com
+ *   operandos constantes, para preservar a materialização do
+ *   resultado booleano (0 ou 1) na variável de destino.
  *
  * Caso especial — divisão por zero:
  *   Emite aviso e preserva a instrução original.
@@ -247,6 +388,7 @@ static int tentar_desdobramento(const char* op,
 
     if (!eh_literal_numerico(src1, &v1)) return 0;
     if (!eh_literal_numerico(src2, &v2)) return 0;
+    if (eh_operacao_comparacao(op)) return 0;
 
     if      (strcmp(op, "ADD") == 0) r = v1 + v2;
     else if (strcmp(op, "SUB") == 0) r = v1 - v2;
@@ -447,6 +589,9 @@ static int tentar_reducao_esforco(const char* op,
  *   2. Identidade algébrica — substitui por COPY
  *   3. Redução de esforço — troca op cara por op barata
  *   4. Emissão direta — nenhuma otimização aplicável
+ *
+ * Antes dessa cascata, operandos que possuem valor constante conhecido
+ * no bloco básico atual são substituídos por seus literais.
  * ================================================================ */
 
 void gci_emitir_operacao_otimizada(const char* op,
@@ -454,11 +599,17 @@ void gci_emitir_operacao_otimizada(const char* op,
                                    const char* src1,
                                    const char* src2)
 {
-    if (tentar_desdobramento(op, dest, src1, src2))  return;
-    if (tentar_identidade(op, dest, src1, src2))     return;
-    if (tentar_reducao_esforco(op, dest, src1, src2)) return;
+    char src1_resolvido[256];
+    char src2_resolvido[256];
 
-    gci_emitir_operacao(op, dest, src1, src2);
+    resolver_constante_gci(src1, src1_resolvido, sizeof(src1_resolvido));
+    resolver_constante_gci(src2, src2_resolvido, sizeof(src2_resolvido));
+
+    if (tentar_desdobramento(op, dest, src1_resolvido, src2_resolvido))  return;
+    if (tentar_identidade(op, dest, src1_resolvido, src2_resolvido))     return;
+    if (tentar_reducao_esforco(op, dest, src1_resolvido, src2_resolvido)) return;
+
+    gci_emitir_operacao(op, dest, src1_resolvido, src2_resolvido);
 }
 
 /* ================================================================
@@ -467,18 +618,21 @@ void gci_emitir_operacao_otimizada(const char* op,
 
 void gci_emitir_func_inicio(const char* nome)
 {
+    limpar_constantes_gci();
     registrar_ir("FUNC_BEGIN", nome, "", "");
     printf("%s:\n", nome);
 }
 
 void gci_emitir_func_fim(const char* nome)
 {
+    limpar_constantes_gci();
     registrar_ir("FUNC_END", nome, "", "");
     printf("    END_FUNC %s\n", nome);
 }
 
 void gci_emitir_parametro(const char* nome)
 {
+    limpar_constantes_gci();
     registrar_ir("PARAM_DEF", nome, "", "");
     printf("    PARAM_DEF %s\n", nome);
 }
@@ -510,19 +664,27 @@ void gci_adicionar_argumento_call(const char* argumento)
 
 void gci_emitir_jump_condicional(const char* condicao, const char* label)
 {
-    registrar_ir("IF_FALSE", condicao, label, "");
-    printf("    IF_FALSE %s GOTO %s\n", condicao, label);
+    char condicao_resolvida[256];
+
+    resolver_constante_gci(condicao,
+                           condicao_resolvida,
+                           sizeof(condicao_resolvida));
+    registrar_ir("IF_FALSE", condicao_resolvida, label, "");
+    limpar_constantes_gci();
+    printf("    IF_FALSE %s GOTO %s\n", condicao_resolvida, label);
 }
 
 void gci_emitir_jump(const char* label)
 {
     registrar_ir("GOTO", label, "", "");
+    limpar_constantes_gci();
     printf("    GOTO %s\n", label);
 }
 
 void gci_emitir_label(const char* label)
 {
     registrar_ir("LABEL", label, "", "");
+    limpar_constantes_gci();
     printf("%s:\n", label);
 }
 
@@ -531,9 +693,12 @@ void gci_emitir_label(const char* label)
  * ================================================================ */
 void gci_emitir_param(const char* valor)
 {
-    registrar_ir("PARAM_ARG", valor, "", "");
-    gci_adicionar_argumento_call(valor);
-    printf("    PARAM %s\n", valor);
+    char valor_resolvido[256];
+
+    resolver_constante_gci(valor, valor_resolvido, sizeof(valor_resolvido));
+    registrar_ir("PARAM_ARG", valor_resolvido, "", "");
+    gci_adicionar_argumento_call(valor_resolvido);
+    printf("    PARAM %s\n", valor_resolvido);
 }
 
 void gci_emitir_call(const char* dest, const char* func)
@@ -550,28 +715,43 @@ void gci_emitir_call(const char* dest, const char* func)
     }
     printf("    CALL %s, %s\n", dest, func);
     gci_limpar_argumentos_call();
+    limpar_constantes_gci();
+    invalidar_constante_gci(dest);
 }
 
 void gci_emitir_return(const char* valor)
 {
-    registrar_ir("RETURN", valor, "", "");
-    printf("    RETURN %s\n", valor);
+    char valor_resolvido[256];
+
+    resolver_constante_gci(valor, valor_resolvido, sizeof(valor_resolvido));
+    registrar_ir("RETURN", valor_resolvido, "", "");
+    limpar_constantes_gci();
+    printf("    RETURN %s\n", valor_resolvido);
 }
 
 void gci_emitir_read_list(const char* dest,
                           const char* lista,
                           const char* indice)
 {
-    registrar_ir("GET_ARR", dest, lista, indice);
-    printf("    GET_ARR %s, %s[%s]\n", dest, lista, indice);
+    char indice_resolvido[256];
+
+    resolver_constante_gci(indice, indice_resolvido, sizeof(indice_resolvido));
+    registrar_ir("GET_ARR", dest, lista, indice_resolvido);
+    invalidar_constante_gci(dest);
+    printf("    GET_ARR %s, %s[%s]\n", dest, lista, indice_resolvido);
 }
 
 void gci_emitir_write_list(const char* lista,
                            const char* indice,
                            const char* valor)
 {
-    registrar_ir("SET_ARR", lista, indice, valor);
-    printf("    SET_ARR %s[%s], %s\n", lista, indice, valor);
+    char indice_resolvido[256];
+    char valor_resolvido[256];
+
+    resolver_constante_gci(indice, indice_resolvido, sizeof(indice_resolvido));
+    resolver_constante_gci(valor, valor_resolvido, sizeof(valor_resolvido));
+    registrar_ir("SET_ARR", lista, indice_resolvido, valor_resolvido);
+    printf("    SET_ARR %s[%s], %s\n", lista, indice_resolvido, valor_resolvido);
 }
 
 /* ================================================================
@@ -897,6 +1077,16 @@ static void emitir_comparacao(FILE* out,
         emitir_true_false(out, mapa, qtd, inst->a, "BEQ", "", "BCC");
 }
 
+static int eh_operacao_comparacao(const char* op)
+{
+    return strcmp(op, "SEQ") == 0 ||
+           strcmp(op, "SNE") == 0 ||
+           strcmp(op, "SGT") == 0 ||
+           strcmp(op, "SLT") == 0 ||
+           strcmp(op, "SGE") == 0 ||
+           strcmp(op, "SLE") == 0;
+}
+
 static void emitir_logico(FILE* out,
                           SimboloAsm* mapa,
                           int qtd,
@@ -1182,8 +1372,18 @@ int gci_gerar_assembly_6502(const char* arquivo_fonte,
         }
         else if (strcmp(inst->op, "COPY") == 0)
         {
-            emitir_load(out, mapa, qtd_mapa, inst->b);
-            emitir_store(out, mapa, qtd_mapa, inst->a);
+            int idx_dest = buscar_asm(mapa, qtd_mapa, inst->a);
+            int idx_src = buscar_asm(mapa, qtd_mapa, inst->b);
+
+            if (idx_dest >= 0 && idx_dest == idx_src)
+            {
+                fprintf(out, "    ; otimizacao: copia redundante removida\n");
+            }
+            else
+            {
+                emitir_load(out, mapa, qtd_mapa, inst->b);
+                emitir_store(out, mapa, qtd_mapa, inst->a);
+            }
         }
         else if (strcmp(inst->op, "ADD") == 0)
         {
@@ -1240,12 +1440,49 @@ int gci_gerar_assembly_6502(const char* arquivo_fonte,
         }
         else if (strcmp(inst->op, "IF_FALSE") == 0)
         {
-            emitir_load(out, mapa, qtd_mapa, inst->a);
-            fprintf(out, "    BEQ %s\n", inst->b);
+            int valor_literal;
+
+            if (texto_literal(inst->a, &valor_literal))
+            {
+                if (valor_literal == 0)
+                {
+                    if (!(i + 1 < qtd_ir &&
+                          strcmp(ir[i + 1].op, "LABEL") == 0 &&
+                          strcmp(ir[i + 1].a, inst->b) == 0))
+                    {
+                        fprintf(out,
+                                "    ; otimizacao: condicao falsa constante\n");
+                        fprintf(out, "    JMP %s\n", inst->b);
+                    }
+                }
+                else
+                {
+                    fprintf(out,
+                            "    ; otimizacao: condicao verdadeira constante\n");
+                }
+            }
+            else
+            {
+                emitir_load(out, mapa, qtd_mapa, inst->a);
+                fprintf(out, "    BEQ %s\n", inst->b);
+            }
         }
         else if (strcmp(inst->op, "GOTO") == 0)
         {
-            if (inst->a[0] != '\0') fprintf(out, "    JMP %s\n", inst->a);
+            if (inst->a[0] != '\0')
+            {
+                if (i + 1 < qtd_ir &&
+                    strcmp(ir[i + 1].op, "LABEL") == 0 &&
+                    strcmp(ir[i + 1].a, inst->a) == 0)
+                {
+                    fprintf(out,
+                            "    ; otimizacao: JMP para proximo label removido\n");
+                }
+                else
+                {
+                    fprintf(out, "    JMP %s\n", inst->a);
+                }
+            }
         }
         else if (strcmp(inst->op, "LABEL") == 0)
         {

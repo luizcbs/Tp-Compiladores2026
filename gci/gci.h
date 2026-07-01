@@ -12,12 +12,12 @@
  * pelas ações semânticas do translate.y no momento em que o
  * Bison reduz cada construção da linguagem.
  *
- * Além da emissão básica, o módulo implementa três otimizações
- * aplicadas em tempo de compilação, sem necessidade de buffer:
+ * Além da emissão básica, o módulo implementa otimizações aplicadas
+ * em tempo de compilação e durante a geração de assembly:
  *
  *   1. Desdobramento de constante (constant folding)
- *      Se os dois operandos são literais, o resultado é calculado
- *      em compile-time e emitido como COPY.
+ *      Se os dois operandos aritméticos/lógicos são literais, o
+ *      resultado é calculado em compile-time e emitido como COPY.
  *      Ex: ADD x, 3, 4  →  COPY x, 7
  *
  *   2. Identidade algébrica
@@ -31,6 +31,16 @@
  *      mais eficiente em arquiteturas sem instrução MUL nativa
  *      (como o MOS6502, alvo do TP4).
  *      Ex: MUL x, a, 2  →  ADD x, a, a
+ *
+ *   4. Propagação local de constantes
+ *      Constantes conhecidas dentro do bloco básico são substituídas
+ *      antes da emissão da operação.
+ *      Ex: COPY a, 3; ADD b, a, 2  →  COPY b, 5
+ *
+ *   5. Otimizações de assembly
+ *      Cópias redundantes são removidas e jumps para o próximo label
+ *      são eliminados. Comparações relacionais continuam gravando
+ *      explicitamente 0 ou 1 para preservar a memória observável.
  *
  * As otimizações são aplicadas em cascata por
  * gci_emitir_operacao_otimizada(), ponto de entrada principal
@@ -59,8 +69,8 @@ char* gci_pop_if_label();
  * Emissão com otimizações (ponto de entrada principal)
  * --------------------------------------------------------------- */
 
-/* Aplica constant folding → identidade algébrica → redução de
-   esforço → emissão direta, nessa ordem. */
+/* Aplica propagação local → constant folding → identidade algébrica
+   → redução de esforço → emissão direta, nessa ordem. */
 void gci_emitir_operacao_otimizada(const char* op,
                                    const char* dest,
                                    const char* src1,

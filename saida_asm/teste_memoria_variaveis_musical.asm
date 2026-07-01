@@ -14,9 +14,7 @@ __main:
     STA $00
     LDA #4
     STA $01
-    LDA $00
-    CLC
-    ADC $01
+    LDA #7
     STA $02
 __applause:
     BRK
