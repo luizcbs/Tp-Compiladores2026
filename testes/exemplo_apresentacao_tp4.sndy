@@ -1,0 +1,74 @@
+// Exemplo para apresentacao do TP4
+// Ideia: calcular uma nota final, decidir se foi aprovada
+// e executar um pequeno loop contador.
+//
+// Traducoes dos identificadores:
+// G  = nota base
+// D  = bonus
+// A  = nota final
+// E  = limite de aprovacao
+// AE = situacao final, 1 = aprovado e 0 = reprovado
+// EG = aprovado, valor booleano
+// GG = contador do loop
+// GA = passo do loop
+// AD = limite do loop
+// DE = continua, condicao do while
+
+// Declaracoes inteiras
+C7 G7 G F#m Bbm B C
+C7 G7 D F#m Bbm B C
+C7 G7 A F#m Bbm B C
+C7 G7 E F#m Bbm B C
+C7 G7 A E F#m Bbm B C
+C7 G7 G G F#m Bbm B C
+C7 G7 G A F#m Bbm B C
+C7 G7 A D F#m Bbm B C
+
+// Declaracoes booleanas
+E7 G7 E G F#m Bbm B C
+E7 G7 D E F#m Bbm B C
+
+// G = 3
+Em G F#m Cmaj7 Abm Fmaj7 Abm B C
+
+// D = 4
+Em D F#m Cmaj7 Abm Dmaj7 Cmaj7 Abm B C
+
+// A = G + D
+// Com otimizacao, o compilador ja sabe que G=3 e D=4,
+// entao o assembly pode guardar 7 diretamente em A.
+Em A F#m G F#m D F#m B C
+
+// E = 6
+Em E F#m Cmaj7 Abm Dmaj7 Emaj7 Abm B C
+
+// EG = A >= E
+// A comparacao continua sendo materializada na memoria,
+// para o resultado booleano ficar visivel no emulador.
+Am7 E G F#m A F#m E F#m B C
+
+// Se EG for verdadeiro, AE recebe 1; caso contrario, recebe 0.
+F C
+    E G F#m B C
+    Em A E F#m Cmaj7 Abm Dmaj7 Abm B C
+Bbm
+
+C# C
+    Em A E F#m Cmaj7 Abm Cmaj7 Abm B C
+Bbm
+
+// Preparacao do loop: contador = 0, passo = 1, limite = 3
+Em G G F#m Cmaj7 Abm Cmaj7 Abm B C
+Em G A F#m Cmaj7 Abm Dmaj7 Abm B C
+Em A D F#m Cmaj7 Abm Fmaj7 Abm B C
+
+// DE = GG < AD
+Fdim7 D E F#m G G F#m A D F#m B C
+
+// Enquanto DE for verdadeiro, contador recebe contador + passo.
+// No fim de cada volta, a condicao DE e recalculada.
+Ebmaj7 C
+    D E F#m B C
+    Em G G F#m G G F#m G A F#m B C
+    Fdim7 D E F#m G G F#m A D F#m B C
+Bbm
